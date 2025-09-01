@@ -13,6 +13,10 @@ COPY requirements.txt .
 
 RUN pip install --no-cache-dir --no-deps -r requirements.txt
 
+COPY proto proto
+
 COPY ankibot ankibot
+
+RUN mkdir -p ankibot/proto_gen && python -m grpc_tools.protoc --python_out=ankibot/proto_gen/ --proto_path=proto/ proto/*.proto
 
 CMD ["python", "-m", "ankibot"]

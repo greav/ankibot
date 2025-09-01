@@ -33,6 +33,10 @@ frozenlist==1.7.0
     # via
     #   aiohttp
     #   aiosignal
+grpcio==1.74.0
+    # via grpcio-tools
+grpcio-tools==1.74.0
+    # via ankibot
 h11==0.16.0
     # via httpcore
 httpcore==1.0.9
@@ -63,7 +67,9 @@ propcache==0.3.2
     #   aiohttp
     #   yarl
 protobuf==6.32.0
-    # via ankibot
+    # via
+    #   ankibot
+    #   grpcio-tools
 pydantic==2.11.7
     # via
     #   aiogram
@@ -73,6 +79,8 @@ pydantic-core==2.33.2
     # via pydantic
 pyyaml==6.0.2
     # via omegaconf
+setuptools==80.9.0
+    # via grpcio-tools
 sniffio==1.3.1
     # via
     #   anyio

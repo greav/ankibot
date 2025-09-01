@@ -4,3 +4,7 @@ logger:
 
 bot:
   token: ${oc.env:BOT_TOKEN}
+
+anki:
+  username: ${oc.env:ANKI_USERNAME}
+  password: ${oc.env:ANKI_PASSWORD}

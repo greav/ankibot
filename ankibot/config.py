@@ -12,9 +12,16 @@ class BotConfig:
 
 
 @dataclass
+class AnkiConfig:
+    username: str
+    password: str
+
+
+@dataclass
 class Config:
     bot: BotConfig
     logger: LoggerConfig
+    anki: AnkiConfig
 
 
 def load_config(path: str) -> Config:

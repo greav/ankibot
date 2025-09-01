@@ -7,6 +7,9 @@ clean:
 export_requirements:
 	uv export --frozen --no-dev --no-hashes --output-file=requirements.txt
 
+generate_proto:
+	python -m grpc_tools.protoc --python_out=ankibot/proto_gen/ --proto_path=proto/ proto/*.proto
+
 run:
 	python -m ankibot
 

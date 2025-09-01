@@ -8,6 +8,8 @@ dependencies = [
     "pydantic",
     "omegaconf",
     "aiogram>=3.22.0",
+    "httpx>=0.28.1",
+    "protobuf>=6.32.0",
 ]
 
 [dependency-groups]
@@ -17,6 +19,7 @@ dev = [
     "mypy",
     "codespell",
     "vulture",
+    "grpcio-tools>=1.74.0",
 ]
 
 [tool.mypy]

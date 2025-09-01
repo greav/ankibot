@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+message Auth {
+  string username = 1;
+  string password = 2;
+}
+
+message AuthResponse {
+    enum Status {
+        UNKNOWN = 0;
+        AUTHENTICATED = 1;
+        INVALID_USER = 2;
+        INVALID_PASS = 3;
+    }
+
+    Status status = 1;
+    string token = 2;
+}

@@ -28,3 +28,35 @@ class CardGenerationRequest(BaseModel):
         default_factory=list,
         description="Specific areas to focus on (e.g., 'key concepts', 'definitions', 'examples')",
     )
+
+
+class EnglishWordCard(BaseModel):
+    """Represents an English word card with detailed context information."""
+
+    word: str = Field(description="The English word or phrase")
+    definition: str = Field(
+        description="A concise explanation of the word, avoiding the word itself, "
+        "noting its commonality (common/uncommon) and typical usage context"
+    )
+    part_of_speech: str = Field(description="The grammatical part of speech (noun, verb, adjective, etc.)")
+    synonyms: str = Field(description="A few simpler words or phrases with similar meanings, comma-delimited")
+    situations_to_use: str = Field(
+        description="Bullet points explaining scenarios where the word is appropriately used"
+    )
+    russian_translations: str = Field(description="Russian translations, comma-delimited")
+    example_sentences: str = Field(
+        description="Five short, easy-to-understand sentences that illustrate the word's meaning, "
+        "each with a brief meaning in parentheses"
+    )
+
+
+class EnglishWordResponse(BaseModel):
+    """Response model for English word card generation."""
+
+    word_card: EnglishWordCard = Field(description="Generated English word card with context")
+
+
+class EnglishWordRequest(BaseModel):
+    """Request model for English word card generation."""
+
+    word: str = Field(description="The English word or phrase to generate a card for")

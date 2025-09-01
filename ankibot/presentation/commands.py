@@ -9,6 +9,7 @@ async def set_commands(bot: Bot):
         BotCommand(command="/decks", description="Show available decks"),
         BotCommand(command="/add_card", description="Add a new card to a deck"),
         BotCommand(command="/add_from_passage", description="AI-generate optimal cards from text"),
+        BotCommand(command="/add_english_word", description="Add English vocabulary card"),
         BotCommand(command="/status", description="Check authentication status"),
         BotCommand(command="/whoami", description="Show user info and admin status"),
     ]

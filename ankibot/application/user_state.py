@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Dict, Optional
 
-from .models import AnkiCard
+from .models import AnkiCard, EnglishWordCard
 
 
 class UserState(Enum):
@@ -16,6 +16,8 @@ class UserState(Enum):
     WAITING_FOR_PASSAGE = "waiting_for_passage"
     WAITING_FOR_PASSAGE_DECK_SELECTION = "waiting_for_passage_deck_selection"
     REVIEWING_GENERATED_CARDS = "reviewing_generated_cards"
+    WAITING_FOR_ENGLISH_WORD = "waiting_for_english_word"
+    REVIEWING_ENGLISH_WORD_CARD = "reviewing_english_word_card"
 
 
 @dataclass
@@ -35,6 +37,9 @@ class CardCreationSession:
     generated_cards: Optional[list[AnkiCard]] = None
     current_card_index: int = 0
     cards_to_create: Optional[list[AnkiCard]] = None
+    # English word card generation fields
+    english_word: Optional[str] = None
+    generated_english_card: Optional[EnglishWordCard] = None
 
 
 class UserStateManager:

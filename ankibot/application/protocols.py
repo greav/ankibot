@@ -3,7 +3,7 @@ from typing import Protocol
 
 from httpx import Cookies
 
-from .models import CardGenerationRequest, CardGenerationResponse
+from .models import CardGenerationRequest, CardGenerationResponse, EnglishWordRequest, EnglishWordResponse
 
 
 class CookieStorage(Protocol):
@@ -48,6 +48,13 @@ class AnkiApiClient(Protocol):
         """Add a new card to the specified deck. Returns True if successful."""
         ...
 
+    @abstractmethod
+    async def add_card_with_fields(
+        self, deck_id: int, notetype_id: int, fields: dict[str, str], tags: str = ""
+    ) -> bool:
+        """Add a new card with custom fields mapping. Returns True if successful."""
+        ...
+
 
 class OpenAIClient(Protocol):
     """Protocol for OpenAI API operations."""
@@ -55,4 +62,9 @@ class OpenAIClient(Protocol):
     @abstractmethod
     async def generate_cards_from_passage(self, request: CardGenerationRequest) -> CardGenerationResponse:
         """Generate Anki cards from a text passage using structured output."""
+        ...
+
+    @abstractmethod
+    async def generate_english_word_card(self, request: EnglishWordRequest) -> EnglishWordResponse:
+        """Generate an English word card with detailed context using structured output."""
         ...

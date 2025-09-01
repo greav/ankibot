@@ -143,6 +143,43 @@ class AnkiApiClientImpl(AnkiApiClient):
             logger.error(f"Failed to add card: {e}")
             return False
 
+    async def add_card_with_fields(
+        self, deck_id: int, notetype_id: int, fields: dict[str, str], tags: str = ""
+    ) -> bool:
+        """Add a new card with custom fields mapping. Returns True if successful."""
+        try:
+            ankiuser_cookies = await self._cookie_storage.get_cookies("ankiuser")
+            if not ankiuser_cookies:
+                raise ValueError("Not authenticated with ankiuser")
+
+            # Convert fields dict to ordered list based on note type field order
+            # For now, we'll assume the fields are provided in the correct order
+            # In a more robust implementation, we'd fetch the note type info to get field order
+            field_values = list(fields.values())
+
+            add_payload = notes_pb2.AddOrUpdateRequest(
+                fields=field_values,
+                tags=tags,
+                add=notes_pb2.AddOrUpdateRequest.AddMode(notetype_id=notetype_id, deck_id=deck_id),
+            ).SerializeToString()
+
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    f"{self._ankiuser_base_url}/svc/editor/add-or-update",
+                    content=add_payload,
+                    cookies=ankiuser_cookies,
+                    headers={"Content-Type": "application/octet-stream"},
+                    timeout=self._timeout,
+                )
+                response.raise_for_status()
+
+                logger.info(f"Successfully added card with fields to deck {deck_id}")
+                return True
+
+        except Exception as e:
+            logger.error(f"Failed to add card with fields: {e}")
+            return False
+
     def _parse_decks_info(self, decks_info: decks_pb2.DecksInfoResponse) -> list[dict[str, Any]]:
         """Parse DecksInfoResponse into a list of deck dictionaries."""
         decks = []

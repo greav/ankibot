@@ -2,6 +2,8 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Dict, Optional
 
+from .models import AnkiCard
+
 
 class UserState(Enum):
     """User interaction states for card creation flow."""
@@ -11,6 +13,9 @@ class UserState(Enum):
     WAITING_FOR_BACK = "waiting_for_back"
     WAITING_FOR_TAGS = "waiting_for_tags"
     WAITING_FOR_DECK_SELECTION = "waiting_for_deck_selection"
+    WAITING_FOR_PASSAGE = "waiting_for_passage"
+    WAITING_FOR_PASSAGE_DECK_SELECTION = "waiting_for_passage_deck_selection"
+    REVIEWING_GENERATED_CARDS = "reviewing_generated_cards"
 
 
 @dataclass
@@ -25,6 +30,11 @@ class CardCreationSession:
     notetype_id: Optional[int] = None
     available_decks: Optional[list[dict[str, Any]]] = None
     available_notetypes: Optional[list[dict[str, Any]]] = None
+    # Passage-based card generation fields
+    passage: Optional[str] = None
+    generated_cards: Optional[list[AnkiCard]] = None
+    current_card_index: int = 0
+    cards_to_create: Optional[list[AnkiCard]] = None
 
 
 class UserStateManager:

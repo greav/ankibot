@@ -5,7 +5,8 @@ from aiogram import Router
 from aiogram.filters import Command, CommandStart
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
-from ankibot.application.protocols import AnkiApiClient
+from ankibot.application.models import CardGenerationRequest
+from ankibot.application.protocols import AnkiApiClient, OpenAIClient
 from ankibot.application.user_state import UserState, UserStateManager
 
 logger = logging.getLogger(__name__)
@@ -14,16 +15,26 @@ router = Router()
 
 # Global instances (will be set in main.py)
 anki_client: AnkiApiClient = None  # type: ignore
+openai_client: OpenAIClient = None  # type: ignore
 user_state_manager: UserStateManager = None  # type: ignore
 anki_config: Any = None  # type: ignore
+openai_config: Any = None  # type: ignore
 
 
-def init_handlers(client: AnkiApiClient, state_manager: UserStateManager, config: Any) -> None:
+def init_handlers(
+    anki_api_client: AnkiApiClient,
+    openai_api_client: OpenAIClient,
+    state_manager: UserStateManager,
+    anki_cfg: Any,
+    openai_cfg: Any,
+) -> None:
     """Initialize handlers with dependencies."""
-    global anki_client, user_state_manager, anki_config
-    anki_client = client
+    global anki_client, openai_client, user_state_manager, anki_config, openai_config
+    anki_client = anki_api_client
+    openai_client = openai_api_client
     user_state_manager = state_manager
-    anki_config = config
+    anki_config = anki_cfg
+    openai_config = openai_cfg
 
 
 @router.message(CommandStart())
@@ -35,8 +46,10 @@ async def start_cmd_handler(message: Message):
         "Commands:\n"
         "/login - Login to your Anki account\n"
         "/decks - Show your decks\n"
-        "/add_card - Add a new card\n"
-        "/status - Check authentication status"
+        "/add_card - Add a new card manually\n"
+        "/add_from_passage - Generate cards from text passage\n"
+        "/status - Check authentication status\n"
+        "/whoami - Show user info and admin status"
     )
 
 
@@ -75,6 +88,30 @@ async def status_cmd_handler(message: Message):
     except Exception as e:
         logger.error(f"Status check error: {e}")
         await message.answer("❌ Unable to check status. Please try /login first.")
+
+
+@router.message(Command("whoami"))
+async def whoami_cmd_handler(message: Message):
+    """Handle /whoami command - show user info and admin status."""
+    if not message.from_user:
+        await message.answer("❌ Unable to determine user information.")
+        return
+
+    user = message.from_user
+    user_info = "👤 **User Information**\n\n"
+    user_info += f"**ID:** `{user.id}`\n"
+    user_info += f"**First Name:** {user.first_name}\n"
+
+    if user.last_name:
+        user_info += f"**Last Name:** {user.last_name}\n"
+
+    if user.username:
+        user_info += f"**Username:** @{user.username}\n"
+
+    user_info += f"**Language:** {user.language_code or 'Unknown'}\n"
+    user_info += "**Bot Admin:** ✅ Yes\n"
+
+    await message.answer(user_info)
 
 
 @router.message(Command("decks"))
@@ -134,6 +171,43 @@ async def add_card_cmd_handler(message: Message):
         await message.answer("❌ Unable to start card creation. Please use /login first.")
 
 
+@router.message(Command("add_from_passage"))
+async def add_from_passage_cmd_handler(message: Message):
+    """Handle /add_from_passage command."""
+    if not message.from_user:
+        return
+
+    user_id = message.from_user.id
+
+    try:
+        # Check if we can authenticate (basic check)
+        info = await anki_client.get_info_for_adding()
+        if not info.get("decks") or not info.get("notetypes"):
+            await message.answer("❌ Unable to get deck information. Please use /login first.")
+            return
+
+        # Reset session and store deck info
+        user_state_manager.reset_session(user_id)
+        user_state_manager.update_session(
+            user_id,
+            state=UserState.WAITING_FOR_PASSAGE,
+            available_decks=info["decks"],
+            available_notetypes=info["notetypes"],
+        )
+
+        await message.answer(
+            "📖 **Generate Cards from Passage**\n\n"
+            "Send me a text passage and I'll analyze it to generate the optimal number of Anki cards using AI.\n\n"
+            f"The AI will decide how many cards to create (up to {openai_config.max_cards}) "
+            "based on the content richness and complexity.\n\n"
+            "Please paste or type the text you want to create cards from:"
+        )
+
+    except Exception as e:
+        logger.error(f"Add from passage error for user {user_id}: {e}")
+        await message.answer("❌ Unable to start passage processing. Please use /login first.")
+
+
 @router.callback_query(lambda c: c.data and c.data.startswith("deck_"))
 async def deck_selection_handler(callback: CallbackQuery):
     """Handle deck selection."""
@@ -144,7 +218,7 @@ async def deck_selection_handler(callback: CallbackQuery):
     deck_id = int(callback.data.split("_")[1])
 
     session = user_state_manager.get_session(user_id)
-    if session.state != UserState.WAITING_FOR_DECK_SELECTION:
+    if session.state not in [UserState.WAITING_FOR_DECK_SELECTION, UserState.WAITING_FOR_PASSAGE_DECK_SELECTION]:
         await callback.answer("❌ Invalid state for deck selection.")
         return
 
@@ -165,15 +239,63 @@ async def deck_selection_handler(callback: CallbackQuery):
         await callback.answer("❌ No note types available.")
         return
 
-    # Update session
-    user_state_manager.update_session(
-        user_id, state=UserState.WAITING_FOR_FRONT, deck_id=deck_id, notetype_id=notetype["id"]
+    # Handle different flows based on current state
+    if session.state == UserState.WAITING_FOR_DECK_SELECTION:
+        # Regular manual card creation flow
+        user_state_manager.update_session(
+            user_id, state=UserState.WAITING_FOR_FRONT, deck_id=deck_id, notetype_id=notetype["id"]
+        )
+
+        await callback.message.edit_text(
+            f"✅ Selected deck: {selected_deck['name']}\n\n📝 Now send me the **front** of the card:"
+        )
+
+    elif session.state == UserState.WAITING_FOR_PASSAGE_DECK_SELECTION:
+        # Passage-based card creation flow
+        user_state_manager.update_session(
+            user_id, state=UserState.REVIEWING_GENERATED_CARDS, deck_id=deck_id, notetype_id=notetype["id"]
+        )
+
+        # Start creating cards from the generated cards list
+        await _create_cards_from_generated(callback.message, user_id)
+
+    await callback.answer()
+
+
+async def _create_cards_from_generated(message: Message, user_id: int) -> None:
+    """Helper function to create cards from generated cards list."""
+    session = user_state_manager.get_session(user_id)
+
+    if not session.cards_to_create:
+        await message.edit_text("❌ No cards to create.")
+        return
+
+    success_count = 0
+    total_cards = len(session.cards_to_create)
+
+    for card in session.cards_to_create:
+        try:
+            tags_str = " ".join(card.tags) if card.tags else ""
+            success = await anki_client.add_card(
+                front=card.front,
+                back=card.back,
+                deck_id=session.deck_id or 0,
+                notetype_id=session.notetype_id or 0,
+                tags=tags_str,
+            )
+            if success:
+                success_count += 1
+        except Exception as e:
+            logger.error(f"Error creating card: {e}")
+
+    await message.edit_text(
+        f"🎉 **Cards Created Successfully!**\n\n"
+        f"✅ {success_count}/{total_cards} cards added to your deck\n\n"
+        "Use /add_from_passage to generate more cards from another passage."
     )
 
-    await callback.message.edit_text(
-        f"✅ Selected deck: {selected_deck['name']}\n\n📝 Now send me the **front** of the card:"
-    )
-    await callback.answer()
+    # Reset session
+    user_state_manager.reset_session(user_id)
 
 
 @router.message()
@@ -185,7 +307,56 @@ async def text_message_handler(message: Message):
     user_id = message.from_user.id
     session = user_state_manager.get_session(user_id)
 
-    if session.state == UserState.WAITING_FOR_FRONT:
+    if session.state == UserState.WAITING_FOR_PASSAGE:
+        # Generate cards from passage using OpenAI
+        await message.answer("🤖 Analyzing your passage and generating optimal number of cards... Please wait.")
+
+        try:
+            request = CardGenerationRequest(
+                passage=message.text, max_cards=openai_config.max_cards, difficulty="medium"
+            )
+
+            response = await openai_client.generate_cards_from_passage(request)
+
+            if not response.cards:
+                await message.answer("❌ Failed to generate cards from the passage. Please try with a different text.")
+                user_state_manager.reset_session(user_id)
+                return
+
+            # Store generated cards and show them for review
+            user_state_manager.update_session(
+                user_id,
+                passage=message.text,
+                generated_cards=response.cards,
+                cards_to_create=response.cards,
+                state=UserState.WAITING_FOR_PASSAGE_DECK_SELECTION,
+            )
+
+            # Show generated cards
+            cards_text = f"🤖 **Generated {len(response.cards)} cards:**\n\n"
+            for i, card in enumerate(response.cards, 1):
+                tags_str = f" (Tags: {', '.join(card.tags)})" if card.tags else ""
+                cards_text += f"**Card {i}:**\n"
+                cards_text += f"❓ **Front:** {card.front}\n"
+                cards_text += f"💡 **Back:** {card.back}{tags_str}\n\n"
+
+            cards_text += "📚 **Choose a deck to add these cards to:**"
+
+            # Create inline keyboard for deck selection
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[])
+            for deck in session.available_decks or []:
+                keyboard.inline_keyboard.append(
+                    [InlineKeyboardButton(text=deck["name"], callback_data=f"deck_{deck['id']}")]
+                )
+
+            await message.answer(cards_text, reply_markup=keyboard)
+
+        except Exception as e:
+            logger.error(f"Error generating cards from passage for user {user_id}: {e}")
+            await message.answer("❌ An error occurred while generating cards. Please try again.")
+            user_state_manager.reset_session(user_id)
+
+    elif session.state == UserState.WAITING_FOR_FRONT:
         user_state_manager.update_session(user_id, front=message.text, state=UserState.WAITING_FOR_BACK)
         await message.answer("✅ Front saved!\n\n📝 Now send me the **back** of the card:")
 

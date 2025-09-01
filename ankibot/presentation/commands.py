@@ -8,6 +8,8 @@ async def set_commands(bot: Bot):
         BotCommand(command="/login", description="Login to your Anki account"),
         BotCommand(command="/decks", description="Show available decks"),
         BotCommand(command="/add_card", description="Add a new card to a deck"),
+        BotCommand(command="/add_from_passage", description="AI-generate optimal cards from text"),
         BotCommand(command="/status", description="Check authentication status"),
+        BotCommand(command="/whoami", description="Show user info and admin status"),
     ]
     await bot.set_my_commands(commands=commands)

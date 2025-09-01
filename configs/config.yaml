@@ -4,7 +4,13 @@ logger:
 
 bot:
   token: ${oc.env:BOT_TOKEN}
+  admin_user_ids: ${oc.env:ADMIN_USER_IDS,[]}
 
 anki:
   username: ${oc.env:ANKI_USERNAME}
   password: ${oc.env:ANKI_PASSWORD}
+
+openai:
+  api_key: ${oc.env:OPENAI_API_KEY}
+  model: "gpt-4o-mini"
+  max_cards: 10

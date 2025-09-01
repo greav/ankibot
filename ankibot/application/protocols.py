@@ -3,6 +3,8 @@ from typing import Protocol
 
 from httpx import Cookies
 
+from .models import CardGenerationRequest, CardGenerationResponse
+
 
 class CookieStorage(Protocol):
     """Protocol for storing and retrieving HTTP cookies."""
@@ -44,4 +46,13 @@ class AnkiApiClient(Protocol):
     @abstractmethod
     async def add_card(self, front: str, back: str, deck_id: int, notetype_id: int, tags: str = "") -> bool:
         """Add a new card to the specified deck. Returns True if successful."""
+        ...
+
+
+class OpenAIClient(Protocol):
+    """Protocol for OpenAI API operations."""
+
+    @abstractmethod
+    async def generate_cards_from_passage(self, request: CardGenerationRequest) -> CardGenerationResponse:
+        """Generate Anki cards from a text passage using structured output."""
         ...

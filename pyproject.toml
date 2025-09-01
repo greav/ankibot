@@ -10,6 +10,7 @@ dependencies = [
     "aiogram>=3.22.0",
     "httpx>=0.28.1",
     "protobuf>=6.32.0",
+    "openai>=1.102.0",
 ]
 
 [dependency-groups]

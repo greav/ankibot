@@ -1,0 +1,82 @@
+[project]
+name = "ankibot"
+version = "0.1.0"
+description = "Telegram bot for creating ankig cards"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "pydantic",
+    "omegaconf",
+    "aiogram>=3.22.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest",
+    "ruff",
+    "mypy",
+    "codespell",
+    "vulture",
+]
+
+[tool.mypy]
+namespace_packages = true
+disallow_incomplete_defs = true
+strict_equality = true
+no_implicit_optional = true
+show_error_context = true
+pretty = true
+install_types = true
+non_interactive = true
+warn_redundant_casts = true
+warn_unused_configs = true
+warn_unused_ignores = true
+explicit_package_bases = true
+
+[tool.vulture]
+min_confidence = 60
+paths = ["ankibot"]
+sort_by_size = true
+verbose = false
+
+[tool.ruff]
+line-length = 119
+
+[tool.ruff.lint]
+select = [
+  "F", # Pyflakes
+  "E", "W", # pycodestyle errors and warnings
+  "B", # flake8-bugbear
+  "A", # flake8-builtins
+  "C4", # flake8-comprehensions
+  "ERA", # eradicate
+  "T20", # flake8-print
+  "Q", # flake8-quotes
+  "RSE", # flake8-raise
+  "SIM", # flake8-simplify
+  "ARG", # flake8-unused-arguments
+  "N", # pep8-naming
+  "I", # isort
+]
+
+ignore = [
+    "B008",  # Do not perform function calls in argument defaults
+    "SIM108" # if-else-block-instead-of-if-exp
+]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]
+
+[tool.ruff.lint.isort]
+combine-as-imports = true
+
+[tool.codespell]
+skip = "./venv"
+
+[tool.uv]
+package = false
+
+[tool.uv.pip]
+emit-index-url = true
+output-file = "requirements.txt"
+annotation-style = "line"

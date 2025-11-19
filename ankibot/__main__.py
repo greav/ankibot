@@ -1,4 +1,4 @@
-from .main import main
+from .bootstrap.bot import main
 
 if __name__ == "__main__":
     import asyncio

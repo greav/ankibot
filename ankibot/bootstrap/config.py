@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from omegaconf import OmegaConf
 from pydantic import TypeAdapter
 
-from .infra.logger import LoggerConfig
+from ankibot.infra.logger import LoggerConfig
 
 
 @dataclass

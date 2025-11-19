@@ -8,7 +8,7 @@ export_requirements:
 	uv export --frozen --no-dev --no-hashes --output-file=requirements.txt
 
 run:
-	python -m ankibot
+	uv run --env-file .env -m ankibot
 
 build_image:
 	docker build -t ankibot .

@@ -1,0 +1,72 @@
+syntax = "proto3";
+
+message AddOrUpdateRequest {
+    repeated string fields = 1;
+    string tags = 2;
+    oneof mode {
+        AddMode add = 3;
+        EditMode edit = 4;
+    }
+
+    message AddMode {
+        int64 notetype_id = 1;
+        int64 deck_id = 2;
+    }
+
+    message EditMode {
+        int64 note_id = 1;
+    }
+
+}
+
+
+message GetInfoResponse{
+    repeated NoteType notetypes = 1;
+    repeated Deck decks = 2;
+    int64 current_deck_id = 3;
+    int64 current_notetype_id = 4;
+    repeated Field fields = 5;
+
+    message NoteType {
+        int64 id = 1;
+        string name = 2;
+    }
+
+    message Deck {
+        int64 id = 1;
+        string name = 2;
+    }
+
+    message Field {
+        Ord ord = 1;
+        string name = 2;
+        Config config = 3;
+
+        message Ord {
+            uint32 val = 1;
+
+        }
+
+        message Config {
+            bool sticky = 1;
+            bool rtl = 2;
+            string font_name = 3;
+            uint32 font_size = 4;
+            string description = 5;
+            bool plain_text = 6;
+            bool collapsed = 7;
+            bool exclude_from_search = 8;
+            optional int64 id = 9;
+            optional uint32 tag = 10;
+            bool prevent_deletion = 11;
+            bytes other = 255;
+
+        }
+
+    }
+
+}
+
+message AddOrUpdateResponse {
+    int64 note_id = 1;
+}

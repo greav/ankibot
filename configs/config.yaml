@@ -4,3 +4,32 @@ logger:
 
 bot:
   token: ${oc.env:BOT_TOKEN}
+
+openai:
+  api_key: ${oc.env:OPENAI_API_KEY}
+  model: gpt-4o-mini
+  temperature: 0.2
+
+ankiweb:
+  username: ${oc.env:ANKIWEB_USERNAME}
+  password: ${oc.env:ANKIWEB_PASSWORD}
+  api_base_url: https://ankiweb.net
+  account_base_url: https://ankiuser.net
+  request_timeout: 15
+
+card_template:
+  prompt: |
+    You are an expert English teacher who converts a single vocabulary word into
+    a concise Anki flashcard. Provide the definition, part of speech, synonyms,
+    Russian translations, and two example sentences that demonstrate usage.
+  field_mapping:
+    Word: word
+    Definition: definition
+    Part of Speech: part_of_speech
+    Synonyms: synonyms
+    Russian: russian_translations
+    Examples: example_sentences
+  tags:
+    - ankibot
+    - english
+  list_delimiter: "<br>"

@@ -1,0 +1,30 @@
+syntax = "proto3";
+
+message DecksInfo {
+    optional int32 minutes_west_of_utc = 1;
+}
+
+message Deck {
+    int64 deck_id = 1;
+    string name = 2;
+    uint32 level = 4;
+    bool collapsed = 5;
+    uint32 review_count = 6;
+    uint32 learn_count = 7;
+    uint32 new_count = 8;
+    uint32 intraday_learning = 9;
+    uint32 interday_learning_uncapped = 10;
+    uint32 new_uncapped = 11;
+    uint32 review_uncapped = 12;
+    uint32 total_in_deck = 13;
+    uint32 total_including_children = 14;
+    bool filtered = 16;
+    repeated Deck children = 3;
+}
+
+message DecksInfoResponse {
+    Deck top_node = 1;
+    int64 current_deck_id = 2;
+    uint32 collection_size_bytes = 3;
+    uint64 media_size_bytes = 4;
+}

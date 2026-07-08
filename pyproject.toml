@@ -3,7 +3,7 @@ name = "ankibot"
 version = "0.1.0"
 description = "Telegram bot for creating ankig cards"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.13"
 dependencies = [
     "pydantic",
     "omegaconf",

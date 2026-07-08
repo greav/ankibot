@@ -1,4 +1,7 @@
 class ApplicationError(Exception):
-    status_code = 500
-    title = "Application error has occurred"
-    detail = None
+    message = "Application error has occurred"
+
+    def __init__(self, message: str | None = None) -> None:
+        if message is not None:
+            self.message = message
+        super().__init__(self.message)

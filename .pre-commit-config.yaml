@@ -31,8 +31,10 @@ repos:
     rev: 0.7.22
     hooks:
       - id: mdformat
+        exclude: ^\.claude/
         additional_dependencies:
           - mdformat-gfm # GitHub-flavored Markdown (tables, etc.)
+          - mdformat-frontmatter # keep YAML frontmatter intact instead of eating it
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.11.13
     hooks:

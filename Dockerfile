@@ -1,4 +1,19 @@
-FROM python:3.11-slim AS builder
+FROM python:3.13-slim AS proto
+
+WORKDIR /build
+
+RUN pip install --no-cache-dir grpcio-tools==1.82.1
+
+COPY proto proto
+
+RUN mkdir -p out && python -m grpc_tools.protoc \
+        --proto_path=proto \
+        --python_out=out \
+        --pyi_out=out \
+        $(find proto -name '*.proto')
+
+
+FROM python:3.13-slim
 
 WORKDIR /opt
 
@@ -9,10 +24,14 @@ ENV PATH="/opt/venv/bin:$PATH"
 
 ENV PYTHONUNBUFFERED=1
 
+ENV CONFIG_PATH=/opt/configs/config.yaml
+
 COPY requirements.txt .
 
 RUN pip install --no-cache-dir --no-deps -r requirements.txt
 
 COPY ankibot ankibot
+
+COPY --from=proto /build/out ankibot/infra/anki/pb
 
 CMD ["python", "-m", "ankibot"]

@@ -8,6 +8,8 @@ dependencies = [
     "pydantic",
     "omegaconf",
     "aiogram>=3.22.0",
+    "httpx",
+    "protobuf",
 ]
 
 [dependency-groups]
@@ -17,6 +19,9 @@ dev = [
     "mypy",
     "codespell",
     "vulture",
+    "pytest-asyncio>=1.4.0",
+    "grpcio-tools",
+    "types-protobuf>=7.34.1.20260518",
 ]
 
 [tool.mypy]
@@ -33,6 +38,10 @@ warn_unused_configs = true
 warn_unused_ignores = true
 explicit_package_bases = true
 
+# Requires @override on every method that overrides a base — without it, renaming a port
+# method leaves adapters and test doubles silently stale.
+enable_error_code = ["explicit-override"]
+
 [tool.vulture]
 min_confidence = 60
 paths = ["ankibot"]
@@ -41,6 +50,7 @@ verbose = false
 
 [tool.ruff]
 line-length = 119
+extend-exclude = ["ankibot/infra/anki/pb"]
 
 [tool.ruff.lint]
 select = [
@@ -57,6 +67,7 @@ select = [
   "ARG", # flake8-unused-arguments
   "N", # pep8-naming
   "I", # isort
+  "TID", # flake8-tidy-imports
 ]
 
 ignore = [
@@ -66,12 +77,29 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]
+# Staged for the move to `select = ["ALL"]`; inert until those rule sets are selected.
+"tests/*" = ["S101", "S105", "S106", "S311", "PLR0913", "PLR2004"]
+# Operator-facing CLI scripts report progress on stdout.
+"scripts/*" = ["T201"]
 
 [tool.ruff.lint.isort]
 combine-as-imports = true
 
+[tool.ruff.lint.flake8-tidy-imports]
+ban-relative-imports = "parents"
+
 [tool.codespell]
 skip = "./venv"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_test_loop_scope = "session"
+asyncio_default_fixture_loop_scope = "session"
+pythonpath = ["."]
+markers = [
+  "contract: verifies parsing of recorded upstream payloads",
+]
 
 [tool.uv]
 package = false

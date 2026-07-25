@@ -14,16 +14,30 @@ annotated-types==0.7.0
     # via pydantic
 antlr4-python3-runtime==4.9.3
     # via omegaconf
+anyio==4.14.1
+    # via httpx
 attrs==26.1.0
     # via aiohttp
 certifi==2026.6.17
-    # via aiogram
+    # via
+    #   aiogram
+    #   httpcore
+    #   httpx
 frozenlist==1.8.0
     # via
     #   aiohttp
     #   aiosignal
+h11==0.16.0
+    # via httpcore
+httpcore==1.0.9
+    # via httpx
+httpx==0.28.1
+    # via ankibot
 idna==3.18
-    # via yarl
+    # via
+    #   anyio
+    #   httpx
+    #   yarl
 magic-filter==1.0.12
     # via aiogram
 multidict==6.7.1
@@ -36,6 +50,8 @@ propcache==0.5.2
     # via
     #   aiohttp
     #   yarl
+protobuf==7.35.1
+    # via ankibot
 pydantic==2.13.4
     # via
     #   aiogram

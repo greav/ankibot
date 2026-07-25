@@ -3,7 +3,6 @@ repos:
     rev: v5.0.0
     hooks:
       - id: check-yaml
-        args: [--unsafe]
       - id: check-toml
       - id: end-of-file-fixer
       - id: trailing-whitespace
@@ -28,16 +27,18 @@ repos:
       - id: codespell
         additional_dependencies:
           - tomli
-  - repo: https://github.com/pre-commit/mirrors-prettier
-    rev: v3.1.0
+  - repo: https://github.com/hukkin/mdformat
+    rev: 0.7.22
     hooks:
-      - id: prettier
-        files: \.(md|rst|yml|yaml)
-        args: [--prose-wrap=preserve]
+      - id: mdformat
+        exclude: ^\.claude/
+        additional_dependencies:
+          - mdformat-gfm # GitHub-flavored Markdown (tables, etc.)
+          - mdformat-frontmatter # keep YAML frontmatter intact instead of eating it
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.11.13
     hooks:
-      - id: ruff-check # lint
       - id: ruff-check # sort imports
-        args: ["check", "--select", "I", "--fix"]
+        args: ["--select", "I", "--fix"]
       - id: ruff-format
+      - id: ruff-check # lint

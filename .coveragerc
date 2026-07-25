@@ -1,0 +1,9 @@
+[run]
+source = ankibot
+omit =
+    */ankibot/infra/anki/pb/*
+
+[report]
+exclude_lines =
+    pragma: not covered
+    @overload

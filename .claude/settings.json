@@ -1,0 +1,29 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(uv sync *)",
+      "Bash(make compile_proto)",
+      "Bash(uv run ruff *)",
+      "Bash(uv run mypy *)"
+    ],
+    "deny": [
+      "Read(.env)",
+      "Read(**/.env)"
+    ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "description": "After Claude edits a Python file (scoped to that file), mirror the pre-commit ruff steps: auto-sort imports, format, then report any remaining lint issues back to Claude (exit 2) so they get fixed in-context. Only imports are auto-fixed; other rules are surfaced, not silently rewritten — matching the pre-commit policy.",
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=$(jq -r '.tool_input.file_path // empty'); case \"$f\" in *.py) uv run ruff check --select I --fix --force-exclude \"$f\" >/dev/null 2>&1 ; uv run ruff format --force-exclude \"$f\" >/dev/null 2>&1 ; uv run ruff check --force-exclude \"$f\" 1>&2 || exit 2 ;; esac",
+            "timeout": 60
+          }
+        ]
+      }
+    ]
+  }
+}

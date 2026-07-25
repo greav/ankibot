@@ -188,3 +188,6 @@ pyrightconfig.json
 data/*
 models/*
 logs/*
+
+# Generated from proto/ by `make compile_proto`
+/ankibot/infra/anki/pb/

@@ -1,0 +1,823 @@
+// =============================================================================
+//  AnkiWeb /svc/* — REFERENCE SPECIFICATION (master, not compiled)
+// =============================================================================
+//
+//  !!! DO NOT add this file to protoc's --proto_path. !!!
+//  It is the human-maintained source of truth for every known /svc/* schema.
+//  Compilable, sliced-per-endpoint files live under proto/ankiweb/**.
+//
+//  Workflow:
+//    * New knowledge about the API (a new field, a corrected type) is recorded
+//      HERE FIRST, then re-sliced into the relevant proto/ankiweb/**.proto file.
+//    * Direction is always spec -> slice, never the reverse.
+//
+//  Reconstruction method (from the minified protobuf client):
+//    * Scalar type codes: 1=double 2=float 3=int64 4=uint64 5=int32 6=fixed64
+//      7=fixed32 8=bool 9=string 12=bytes 13=uint32 15=sfixed32 16=sfixed64
+//      17=sint32 18=sint64
+//    * Field names and numbers are verbatim from source. Message names are exact
+//      where the source carried a localName hint, otherwise inferred by convention.
+//
+//  Endpoint -> (Request, Response):
+//
+//    ACCOUNT
+//      POST /svc/account/get-account-status  GetAccountStatusRequest      GetAccountStatusResponse
+//      POST /svc/account/login               LoginRequest                 LoginResponse
+//      POST /svc/account/check-terms         CheckTermsRequest            CheckTermsResponse
+//      POST /svc/account/confirm-terms       ConfirmTermsRequest          ConfirmTermsResponse
+//      POST /svc/account/get-settings        GetSettingsRequest           GetSettingsResponse
+//      POST /svc/account/update-settings     UpdateSettingsRequest        UpdateSettingsResponse
+//      POST /svc/account/total-media         TotalMediaRequest            TotalMediaResponse
+//      POST /svc/account/remove-account      RemoveAccountRequest         RemoveAccountResponse
+//      POST /svc/account/signup              SignupRequest                SignupResponse
+//      POST /svc/account/verify-email        VerifyEmailRequest           VerifyEmailResponse
+//      POST /svc/account/resend-verification ResendVerificationRequest    ResendVerificationResponse
+//      POST /svc/account/reset-password      ResetPasswordRequest         ResetPasswordResponse
+//
+//    DECKS
+//      POST /svc/decks/deck-list-info        DeckListInfoRequest          DeckListInfoResponse
+//      POST /svc/decks/create-deck           CreateDeckRequest            CreateDeckResponse
+//      POST /svc/decks/rename-deck           RenameDeckRequest            RenameDeckResponse
+//      POST /svc/decks/remove-deck           RemoveDeckRequest            RemoveDeckResponse
+//      POST /svc/decks/select-deck           SelectDeckRequest            SelectDeckResponse
+//      POST /svc/decks/deck-share-info       DeckShareInfoRequest         DeckShareInfoResponse
+//      POST /svc/decks/deck-share            DeckShareRequest             DeckShareResponse
+//      POST /svc/decks/deck-share-state      DeckShareStateRequest        DeckShareStateResponse
+//
+//    STUDY
+//      POST /svc/study/study-cards           StudyCardsRequest            StudyCardsResponse
+//      POST /svc/study/upgrade-scheduler     UpgradeSchedulerRequest      UpgradeSchedulerResponse
+//      POST /svc/study/get-deck-limits       GetDeckLimitsRequest         GetDeckLimitsResponse
+//      POST /svc/study/set-deck-limits       SetDeckLimitsRequest         SetDeckLimitsResponse
+//
+//    EDITOR
+//      POST /svc/editor/add-or-update        AddOrUpdateRequest           AddOrUpdateResponse
+//      POST /svc/editor/get-note-info        GetNoteInfoRequest           GetNoteInfoResponse
+//      POST /svc/editor/get-info-for-adding  GetInfoForAddingRequest      GetInfoForAddingResponse
+//      POST /svc/editor/get-notetype-fields  GetNotetypeFieldsRequest     GetNotetypeFieldsResponse
+//
+//    SEARCH
+//      POST /svc/search/search               SearchRequest                SearchCardsResponse
+//
+//    SHARED
+//      GET  /svc/shared/item-info            <query params>               SharedItemInfoResponse
+//      POST /svc/shared/remove-item          RemoveItemRequest            RemoveItemResponse
+//      POST /svc/shared/get-own-review       GetOwnReviewRequest          GetOwnReviewResponse
+//      POST /svc/shared/set-own-review       SetOwnReviewRequest          SetOwnReviewResponse
+//      POST /svc/shared/report-copyright     ReportCopyrightRequest       ReportCopyrightResponse
+//      POST /svc/shared/items-by-author      ItemsByAuthorRequest         ItemsByAuthorResponse
+//      GET  /svc/shared/list-decks           <query params>               ListDecksResponse
+//      GET  /svc/shared/list-addons          <query params>               ListAddonsResponse
+//      POST /svc/shared/list-mine            ListMineRequest              ListMineResponse
+//      POST /svc/shared/reply-to-review      ReplyToReviewRequest         ReplyToReviewResponse
+//      POST /svc/shared/get-addon-info       GetAddonInfoRequest          GetAddonInfoResponse
+//      POST /svc/shared/upload-addon         UploadAddonRequest           UploadAddonResponse
+//
+// =============================================================================
+
+syntax = "proto3";
+
+package ankiweb.svc;
+
+// -----------------------------------------------------------------------------
+//  Generic / shared helper types
+// -----------------------------------------------------------------------------
+
+// Anki's generic uint32 wrapper (used for Notetype.Field.ord).
+message UInt32 {
+  uint32 val = 1;
+}
+
+// FSRS memory state, embedded in scheduling states.
+message FsrsMemoryState {
+  float stability  = 1;
+  float difficulty = 2;
+}
+
+// -----------------------------------------------------------------------------
+//  Notetype (only the Field / Field.Config subtree is referenced by the client)
+// -----------------------------------------------------------------------------
+
+message Notetype {
+  message Field {
+    message Config {
+      bool   sticky              = 1;
+      bool   rtl                 = 2;
+      string font_name           = 3;
+      uint32 font_size           = 4;
+      string description         = 5;
+      bool   plain_text          = 6;
+      bool   collapsed           = 7;
+      bool   exclude_from_search = 8;
+      optional int64  id         = 9;
+      optional uint32 tag        = 10;
+      bool   prevent_deletion    = 11;
+      bytes  other               = 255;
+    }
+    UInt32 ord    = 1;
+    string name   = 2;
+    Config config = 5;
+  }
+}
+
+// Notetype id/name summary (Anki: NotetypeNameId).
+message NotetypeNameId {
+  int64  id   = 1;
+  string name = 2;
+}
+
+// Deck id/name summary (Anki: DeckNameId).
+message DeckNameId {
+  int64  id   = 1;
+  string name = 2;
+}
+
+// -----------------------------------------------------------------------------
+//  Scheduling state family (mirrors anki.scheduler.SchedulingState)
+// -----------------------------------------------------------------------------
+
+message SchedulingState {
+  message New {
+    uint32 position = 1;
+  }
+  message Learning {
+    uint32 remaining_steps = 1;
+    uint32 scheduled_secs  = 2;
+    uint32 elapsed_secs    = 3;
+    optional FsrsMemoryState memory_state = 6;
+  }
+  message Review {
+    uint32 scheduled_days = 1;
+    uint32 elapsed_days   = 2;
+    float  ease_factor    = 3;
+    uint32 lapses         = 4;
+    bool   leeched        = 5;
+    optional FsrsMemoryState memory_state = 6;
+  }
+  message Relearning {
+    Review   review   = 1;
+    Learning learning = 2;
+  }
+  message Normal {
+    oneof kind {
+      New        new        = 1;
+      Learning   learning   = 2;
+      Review     review     = 3;
+      Relearning relearning = 4;
+    }
+  }
+  message Preview {
+    uint32 scheduled_secs = 1;
+    bool   finished       = 2;
+  }
+  message ReschedulingFilter {
+    Normal original_state = 1;
+  }
+  message Filtered {
+    oneof kind {
+      Preview            preview      = 1;
+      ReschedulingFilter rescheduling = 2;
+    }
+  }
+
+  oneof kind {
+    Normal   normal   = 1;
+    Filtered filtered = 2;
+  }
+  optional string custom_data = 3;
+}
+
+// The five candidate next-states for a card being reviewed.
+message SchedulingStates {
+  SchedulingState current = 1;
+  SchedulingState again   = 2;
+  SchedulingState hard    = 3;
+  SchedulingState good    = 4;
+  SchedulingState easy    = 5;
+}
+
+// -----------------------------------------------------------------------------
+//  Deck tree
+// -----------------------------------------------------------------------------
+
+message DeckTreeNode {
+  int64  deck_id                    = 1;
+  string name                       = 2;
+  repeated DeckTreeNode children    = 3;
+  uint32 level                      = 4;
+  bool   collapsed                  = 5;
+  uint32 review_count               = 6;
+  uint32 learn_count                = 7;
+  uint32 new_count                  = 8;
+  uint32 intraday_learning          = 9;
+  uint32 interday_learning_uncapped = 10;
+  uint32 new_uncapped               = 11;
+  uint32 review_uncapped            = 12;
+  uint32 total_in_deck              = 13;
+  uint32 total_including_children   = 14;
+  bool   filtered                   = 16;
+}
+
+// =============================================================================
+//  ACCOUNT service
+// =============================================================================
+
+enum LoginResponseStatus {
+  LOGIN_RESPONSE_STATUS_UNKNOWN       = 0;
+  LOGIN_RESPONSE_STATUS_AUTHENTICATED = 1;
+  LOGIN_RESPONSE_STATUS_INVALID_USER  = 2;
+  LOGIN_RESPONSE_STATUS_INVALID_PASS  = 3;
+}
+
+enum SettingsResult {
+  SETTINGS_RESULT_UNKNOWN                  = 0;
+  SETTINGS_RESULT_PASSWORD_CHANGED         = 1;
+  SETTINGS_RESULT_EMAIL_CHANGED            = 2;
+  SETTINGS_RESULT_INVALID_CURRENT_PASSWORD = 3;
+  SETTINGS_RESULT_INVALID_EMAIL            = 4;
+  SETTINGS_RESULT_EMAIL_UNAVAILABLE        = 5;
+  SETTINGS_RESULT_SPAM_REPORT              = 6;
+}
+
+enum RemoveAccountStatus {
+  REMOVE_ACCOUNT_STATUS_UNKNOWN                 = 0;
+  REMOVE_ACCOUNT_STATUS_VALID_PASSWORD_REQUIRED = 1;
+  REMOVE_ACCOUNT_STATUS_IN_PROGRESS             = 2;
+  REMOVE_ACCOUNT_STATUS_FINISHED                = 3;
+}
+
+enum SignupStatus {
+  SIGNUP_STATUS_UNKNOWN          = 0;
+  SIGNUP_STATUS_SUCCESS          = 1;
+  SIGNUP_STATUS_USERNAME_INVALID = 2;
+  SIGNUP_STATUS_USERNAME_TAKEN   = 3;
+  SIGNUP_STATUS_SPAM_EMAIL       = 4;
+}
+
+enum SendingProgress {
+  SENDING_PROGRESS_UNKNOWN     = 0;
+  SENDING_PROGRESS_SENDING     = 1;
+  SENDING_PROGRESS_DELIVERED   = 2;
+  SENDING_PROGRESS_SPAM        = 3;
+  SENDING_PROGRESS_QUOTA       = 4;
+  SENDING_PROGRESS_OTHER_DELAY = 5;
+  SENDING_PROGRESS_FAILED      = 6;
+}
+
+enum SendResetEmailResult {
+  SEND_RESET_EMAIL_RESULT_UNKNOWN       = 0;
+  SEND_RESET_EMAIL_RESULT_THROTTLED     = 1;
+  SEND_RESET_EMAIL_RESULT_INVALID_EMAIL = 2;
+  SEND_RESET_EMAIL_RESULT_SUCCESS       = 4; // note: 3 is unused
+}
+
+enum SetNewPasswordResult {
+  SET_NEW_PASSWORD_RESULT_UNKNOWN       = 0;
+  SET_NEW_PASSWORD_RESULT_INVALID_TOKEN = 1;
+  SET_NEW_PASSWORD_RESULT_SUCCESS       = 2;
+}
+
+// POST /svc/account/get-account-status
+message GetAccountStatusRequest {}
+message GetAccountStatusResponse {
+  bool            logged_in   = 1;
+  optional string redirect_to = 2;
+}
+
+// POST /svc/account/login
+message LoginRequest {
+  string username = 1;
+  string password = 2;
+}
+message LoginResponse {
+  LoginResponseStatus status = 1;
+  string              token  = 2;
+}
+
+// POST /svc/account/check-terms
+message CheckTermsRequest {}
+message CheckTermsResponse {
+  bool needs_to_confirm = 1;
+}
+
+// POST /svc/account/confirm-terms
+message ConfirmTermsRequest {
+  bool agree_to_terms = 1;
+}
+message ConfirmTermsResponse {}
+
+// POST /svc/account/get-settings
+message GetSettingsRequest {}
+message GetSettingsResponse {
+  string current_email = 1;
+}
+
+// POST /svc/account/update-settings
+message UpdateSettingsRequest {
+  string current_password = 1;
+  oneof change {
+    string new_password = 2;
+    string new_email    = 3;
+  }
+}
+message UpdateSettingsResponse {
+  SettingsResult result = 1;
+}
+
+// POST /svc/account/total-media
+message TotalMediaRequest {}
+message TotalMediaResponse {
+  uint64 total_bytes = 1;
+}
+
+// POST /svc/account/remove-account
+message RemoveAccountRequest {
+  string current_password = 1;
+}
+message RemoveAccountResponse {
+  RemoveAccountStatus status        = 1;
+  uint32              media_removed = 2;
+}
+
+// POST /svc/account/signup
+message SignupRequest {
+  string username = 1;
+  string password = 2;
+}
+message SignupResponse {
+  SignupStatus    status               = 1;
+  optional string ankiuser_login_token = 2;
+}
+
+// POST /svc/account/verify-email
+message VerifyEmailRequest {
+  optional string token = 1;
+}
+message SendingStatus {
+  int64           updated  = 1;
+  SendingProgress progress = 2;
+  string          email    = 3;
+}
+message VerifyEmailResponse {
+  oneof state {
+    bool          token_verified = 1;
+    SendingStatus sending_status = 2;
+  }
+}
+
+// POST /svc/account/resend-verification
+message ResendVerificationRequest {}
+message ResendVerificationResponse {
+  bool throttled = 1;
+}
+
+// POST /svc/account/reset-password
+message ResetPasswordRequest {
+  message NewPassword {
+    string token        = 1;
+    string new_password = 2;
+  }
+  oneof action {
+    string      email_to     = 1;
+    string      check_token  = 2;
+    NewPassword new_password  = 3;
+  }
+}
+message ResetPasswordResponse {
+  oneof result {
+    SendResetEmailResult send_email       = 1;
+    bool                 token_ok         = 2;
+    SetNewPasswordResult set_new_password = 3;
+  }
+}
+
+// =============================================================================
+//  DECKS service
+// =============================================================================
+
+enum DeckShareState {
+  DECK_SHARE_STATE_NO_ACTIVE_SHARE = 0;
+  DECK_SHARE_STATE_WAITING         = 1;
+  DECK_SHARE_STATE_IN_PROGRESS     = 2;
+  DECK_SHARE_STATE_SUCCESS         = 3;
+  DECK_SHARE_STATE_TOO_LARGE       = 4;
+  DECK_SHARE_STATE_UNKNOWN_ERROR   = 5;
+}
+
+message DeckShareMetadata {
+  string title           = 1;
+  string tags            = 2;
+  string support_url     = 3;
+  string description     = 4;
+  int64  deck_id         = 5;
+  optional uint32 shared_id = 6;
+}
+
+// POST /svc/decks/deck-list-info
+message DeckListInfoRequest {
+  optional int32 minutes_west_of_utc = 1;
+}
+message DeckListInfoResponse {
+  DeckTreeNode top_node              = 1;
+  int64        current_deck_id       = 2;
+  uint32       collection_size_bytes = 3;
+  uint64       media_size_bytes      = 4;
+}
+
+// POST /svc/decks/create-deck
+message CreateDeckRequest {
+  string name = 1;
+}
+message CreateDeckResponse {}
+
+// POST /svc/decks/rename-deck
+message RenameDeckRequest {
+  int64  deck_id  = 1;
+  string new_name = 2;
+}
+message RenameDeckResponse {
+  string error = 1;
+}
+
+// POST /svc/decks/remove-deck
+message RemoveDeckRequest {
+  int64 deck_id = 1;
+}
+message RemoveDeckResponse {}
+
+// POST /svc/decks/select-deck
+message SelectDeckRequest {
+  int64 deck_id = 1;
+}
+message SelectDeckResponse {}
+
+// POST /svc/decks/deck-share-info
+message DeckShareInfoRequest {
+  int64 deck_id = 1;
+}
+message DeckShareInfoResponse {
+  DeckShareMetadata metadata      = 1;
+  bool              is_large_user = 2;
+  uint32            share_count   = 3;
+}
+
+// POST /svc/decks/deck-share
+message DeckShareRequest {
+  DeckShareMetadata metadata          = 1;
+  bool              confirm_copyright = 2;
+}
+message DeckShareResponse {}
+
+// POST /svc/decks/deck-share-state
+message DeckShareStateRequest {}
+message DeckShareStateResponse {
+  DeckShareState  state     = 1;
+  optional uint32 shared_id = 2;
+}
+
+// =============================================================================
+//  STUDY service
+// =============================================================================
+
+// POST /svc/study/study-cards
+message Answer {
+  int64           card_id            = 1;
+  uint32          answer_button      = 2;
+  uint32          time_taken_millis  = 3;
+  int64           answered_at_millis = 4;
+  SchedulingState current_state      = 5;
+  SchedulingState next_state         = 6;
+}
+message Card {
+  int64            card_id        = 1;
+  string           question       = 2;
+  string           answer         = 3;
+  uint32           count_index    = 4;
+  repeated string  button_labels  = 5;
+  int64            note_id        = 6;
+  uint32           template_index = 7;
+  SchedulingStates next_states    = 8;
+}
+message StudyCardsRequest {
+  optional Answer answer       = 1;
+  optional int64  next_card_id = 2;
+}
+message StudyCardsResponse {
+  uint32        sched_ver    = 1;
+  repeated Card cards        = 2;
+  uint32        new_count    = 3;
+  uint32        learn_count  = 4;
+  uint32        review_count = 5;
+}
+
+// POST /svc/study/upgrade-scheduler
+message UpgradeSchedulerRequest {
+  bool v3 = 1;
+}
+message UpgradeSchedulerResponse {}
+
+// POST /svc/study/get-deck-limits
+message GetDeckLimitsRequest {}
+message GetDeckLimitsResponse {
+  uint32 new                           = 1;
+  uint32 review                        = 2;
+  string error                         = 3;
+  bool   new_cards_ignore_review_limit = 4;
+}
+
+// POST /svc/study/set-deck-limits
+message SetDeckLimitsRequest {
+  uint32 new                           = 1;
+  uint32 review                        = 2;
+  bool   new_cards_ignore_review_limit = 3;
+}
+message SetDeckLimitsResponse {}
+
+// =============================================================================
+//  EDITOR service
+// =============================================================================
+
+// POST /svc/editor/add-or-update
+message AddOrUpdateRequest {
+  message AddMode {
+    int64 notetype_id = 1;
+    int64 deck_id     = 2;
+  }
+  message EditMode {
+    int64 note_id = 1;
+  }
+  repeated string fields = 1;
+  string          tags   = 2;
+  oneof mode {
+    AddMode  add  = 3;
+    EditMode edit = 4;
+  }
+}
+message AddOrUpdateResponse {}
+
+// POST /svc/editor/get-note-info
+message GetNoteInfoRequest {
+  int64 note_id = 1;
+}
+message GetNoteInfoResponse {
+  repeated string          fields          = 1;
+  repeated Notetype.Field  notetype_fields = 2;
+  string                   tags            = 3;
+}
+
+// POST /svc/editor/get-info-for-adding
+message GetInfoForAddingRequest {}
+message GetInfoForAddingResponse {
+  repeated NotetypeNameId  notetypes          = 1;
+  repeated DeckNameId      decks              = 2;
+  int64                    current_deck_id    = 3;
+  int64                    current_notetype_id = 4;
+  repeated Notetype.Field  fields             = 5;
+}
+
+// POST /svc/editor/get-notetype-fields
+message GetNotetypeFieldsRequest {
+  int64 notetype_id = 1;
+}
+message GetNotetypeFieldsResponse {
+  repeated Notetype.Field fields = 1;
+}
+
+// =============================================================================
+//  SEARCH service
+// =============================================================================
+
+// POST /svc/search/search
+message SearchRequest {
+  string search = 1;
+}
+message SearchCardsResponse {
+  message Note {
+    int64  note_id       = 1;
+    string joined_fields = 2;
+  }
+  repeated Note notes = 1;
+  string        error = 2;
+}
+
+// =============================================================================
+//  SHARED service
+// =============================================================================
+
+enum UserUploadStatus {
+  USER_UPLOAD_STATUS_UNSPECIFIED = 0;
+  USER_UPLOAD_STATUS_NO_USER     = 1;
+  USER_UPLOAD_STATUS_TOO_NEW     = 2;
+  USER_UPLOAD_STATUS_CAN_UPLOAD  = 3;
+}
+
+// A user review on a shared item.
+message Review {
+  int64           post_timestamp          = 1;
+  bool            thumbs_up               = 2;
+  string          body                    = 4;
+  optional string reply_text              = 5;
+  optional int64  reply_timestamp         = 6;
+  optional string reviewer_email_if_admin = 7;
+  optional string reviewer_ip_if_admin    = 8;
+}
+
+message SampleNote {
+  message Field {
+    string name  = 1;
+    string value = 2;
+  }
+  repeated Field fields = 1;
+}
+
+// GET /svc/shared/item-info   (request is passed as URL query params, no protobuf body)
+message SharedItemInfoResponse {
+  message AdminInfo {
+    string sharer_email = 1;
+    string sharer_ip    = 2;
+    uint32 downloads    = 3;
+  }
+  message DeckInfo {
+    uint32              notes        = 1;
+    uint32              audio        = 2;
+    uint32              images       = 3;
+    repeated SampleNote sample_notes = 4;
+    string              download_key = 5;
+  }
+  message AddonInfo {
+    message Version {
+      string description     = 1;
+      int64  updated_at_secs = 2;
+    }
+    bool            v2_0     = 1;
+    bool            v2_1     = 2;
+    repeated Version versions = 3;
+  }
+  message Available {
+    repeated Review  reviews             = 1;
+    bool             is_owner            = 4;
+    string           title               = 5;
+    string           tags                = 6;
+    uint32           size                = 7;
+    int64            last_updated        = 8;
+    string           description         = 9;
+    oneof kind {
+      DeckInfo  deck  = 10;
+      AddonInfo addon = 11;
+    }
+    optional string  support_url         = 12;
+    uint32           items_shared_by_user = 13;
+    optional AdminInfo admin_info        = 14;
+    bool             just_uploaded       = 15;
+    bool             is_suspended        = 16;
+    bool             is_copyright_holder = 17;
+    uint32           thumbs_up           = 18;
+    uint32           thumbs_down         = 19;
+    string           original_deck_name  = 20;
+    bool             too_new_for_rating  = 21;
+  }
+  oneof kind {
+    Available available     = 1;
+    bool      missing       = 2;
+    bool      access_denied = 3;
+  }
+}
+
+// POST /svc/shared/remove-item
+message RemoveItemRequest {
+  uint32 shared_id = 1;
+}
+message RemoveItemResponse {}
+
+// POST /svc/shared/get-own-review
+message OwnReview {
+  string body      = 1;
+  bool   thumbs_up = 2;
+}
+message GetOwnReviewRequest {
+  uint32 shared_id = 1;
+}
+message GetOwnReviewResponse {
+  OwnReview       review            = 1;
+  string          shared_item_title = 2;
+  optional string support_page      = 3;
+}
+
+// POST /svc/shared/set-own-review
+message SetOwnReviewRequest {
+  uint32    shared_id = 1;
+  OwnReview review    = 2;
+}
+message SetOwnReviewResponse {}
+
+// POST /svc/shared/report-copyright
+message ReportCopyrightRequest {
+  uint32 shared_id = 1;
+}
+message ReportCopyrightResponse {}
+
+// POST /svc/shared/items-by-author
+message ItemsByAuthorRequest {
+  uint32 shared_id = 1;
+}
+message ItemsByAuthorResponse {
+  message Item {
+    uint32 shared_id = 1;
+    string title     = 2;
+  }
+  repeated Item items = 1;
+}
+
+// GET /svc/shared/list-decks   (request via URL query params)
+message ListDecksResponse {
+  message Row {
+    uint32 id          = 1;
+    string title       = 2;
+    uint32 thumbs_up   = 3;
+    uint32 thumbs_down = 4;
+    int64  mtime       = 5;
+    uint32 notes       = 6;
+    uint32 audio       = 7;
+    uint32 images      = 8;
+  }
+  repeated Row rows = 1;
+}
+
+// GET /svc/shared/list-addons  (request via URL query params)
+message ListAddonsResponse {
+  message Row {
+    uint32 id                    = 1;
+    string title                 = 2;
+    uint32 thumbs_up             = 3;
+    uint32 thumbs_down           = 4;
+    int64  mtime                 = 5;
+    int32  max_supported_version = 6;
+  }
+  repeated Row     rows               = 1;
+  UserUploadStatus user_upload_status = 2;
+}
+
+// POST /svc/shared/list-mine
+message ListMineRequest {}
+message ListMineResponse {
+  message Item {
+    uint32 id                    = 1;
+    string title                 = 2;
+    uint32 thumbs_up             = 3;
+    uint32 thumbs_down           = 4;
+    int64  mtime                 = 5;
+    uint32 downloads             = 6;
+    optional int32 max_supported_version = 7;
+  }
+  message ReviewEntry {
+    Review review  = 1;
+    uint32 item_id = 2;
+    uint32 hash    = 3;
+  }
+  repeated Item        items         = 1;
+  repeated ReviewEntry reviews       = 2;
+  repeated string      expired_decks = 3;
+}
+
+// POST /svc/shared/reply-to-review
+message ReplyToReviewRequest {
+  uint32 shared_Id = 1; // NOTE: capital 'I' preserved from the wire format
+  uint32 hash      = 2;
+  string body      = 3;
+}
+message ReplyToReviewResponse {}
+
+// Shared add-on descriptor (used by get-addon-info + upload-addon).
+message Addon {
+  message Branch {
+    uint32 min_version = 1;
+    int32  max_version = 2;
+  }
+  optional uint32 addon_id  = 1;
+  string          title     = 2;
+  string          tags      = 3;
+  string          support_url = 4;
+  string          description = 5;
+  repeated Branch branches  = 6;
+}
+
+// POST /svc/shared/get-addon-info
+message GetAddonInfoRequest {
+  uint32 addon_id = 1;
+}
+message GetAddonInfoResponse {
+  Addon addon = 1;
+}
+
+// POST /svc/shared/upload-addon
+message UploadAddonRequest {
+  message File {
+    bytes  zip_data     = 1;
+    uint32 branch_index = 2;
+  }
+  Addon         info = 1;
+  optional File file = 2;
+}
+message UploadAddonResponse {
+  uint32 addon_id = 1;
+}

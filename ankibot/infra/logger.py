@@ -1,6 +1,7 @@
 import contextvars
 import logging
 from dataclasses import dataclass
+from typing import override
 
 request_id_var = contextvars.ContextVar("request_id", default="NA")
 
@@ -12,20 +13,19 @@ LOG_LEVELS = {
     "CRITICAL": logging.CRITICAL,
 }
 
-DEFAULT_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-
 
 class RequestFormatter(logging.Formatter):
+    @override
     def format(self, record: logging.LogRecord) -> str:
         record.request_id = request_id_var.get()
 
         return super().format(record)
 
 
-@dataclass
+@dataclass(frozen=True, kw_only=True)
 class LoggerConfig:
-    level: str = "INFO"
-    fmt: str = DEFAULT_FORMAT
+    level: str
+    fmt: str
 
 
 def configure_root_logger(config: LoggerConfig) -> logging.Logger:

@@ -1,0 +1,24 @@
+// Sliced from docs/ankiweb-svc.reference.proto — do not edit by hand beyond
+// re-slicing from the reference. Regenerate with `make compile_proto` and
+// commit the result whenever this file changes.
+
+syntax = "proto3";
+
+package ankiweb.svc;
+
+enum LoginResponseStatus {
+  LOGIN_RESPONSE_STATUS_UNKNOWN       = 0;
+  LOGIN_RESPONSE_STATUS_AUTHENTICATED = 1;
+  LOGIN_RESPONSE_STATUS_INVALID_USER  = 2;
+  LOGIN_RESPONSE_STATUS_INVALID_PASS  = 3;
+}
+
+// POST /svc/account/login
+message LoginRequest {
+  string username = 1;
+  string password = 2;
+}
+message LoginResponse {
+  LoginResponseStatus status = 1;
+  string              token  = 2;
+}

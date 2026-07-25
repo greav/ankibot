@@ -4,3 +4,9 @@ logger:
 
 bot:
   token: ${oc.env:BOT_TOKEN}
+
+anki_web:
+  username: ${oc.env:ANKI_USERNAME}
+  password: ${oc.env:ANKI_PASSWORD}
+  ankiweb_base_url: https://ankiweb.net
+  ankiuser_base_url: https://ankiuser.net

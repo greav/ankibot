@@ -1,10 +1,25 @@
 {
   "permissions": {
     "allow": [
-      "Bash(uv sync *)",
+      "Bash(uv sync:*)",
+      "Bash(uv run pytest:*)",
+      "Bash(uv run mypy:*)",
+      "Bash(uv run ruff:*)",
+      "Bash(uv run codespell:*)",
       "Bash(make compile_proto)",
-      "Bash(uv run ruff *)",
-      "Bash(uv run mypy *)"
+      "Bash(make test)",
+      "Bash(make export_requirements)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git show:*)",
+      "Bash(git ls-files:*)"
+    ],
+    "ask": [
+      "Bash(make record_payload:*)",
+      "Bash(make run)",
+      "Bash(make build_image)",
+      "Bash(make run_container)"
     ],
     "deny": [
       "Read(.env)",

@@ -11,8 +11,9 @@ Telegram bot that turns Telegram messages into Anki flashcards for spaced-repeti
 
 ## Layer map
 
-- `ankibot/application/` — core business/application logic: use cases, interactors, DTOs, and interface definitions (protocols). The whole layer must not import from `infra` or `presentation` — dependencies point inward.
-  - `application/exceptions/` holds domain errors;
+- `ankibot/domain/` — the rules of the subject matter itself: domain functions, records, value objects, entities, and the errors they raise. It imports from no other layer. Ports and DTOs belong to `application/` — see Domain model for the line between a DTO and a domain record.
+- `ankibot/application/` — application logic: use cases, interactors, DTOs, and interface definitions (protocols). It may import `domain`; it must not import from `infra` or `presentation` — dependencies point inward.
+  - `application/exceptions/` holds errors raised by use cases; errors raised by domain objects live in `domain/errors.py`, under a shared root so one `except` still catches both;
   - `application/common/` holds interfaces and DTOs shared across use cases.
 - `ankibot/infra/` — infrastructure and external-service adapters (API clients, DB adapters, logging). Adapters implement the protocols defined in `application/`.
 - `ankibot/presentation/` — user-facing layer (Telegram commands and handlers).
@@ -25,17 +26,36 @@ Telegram bot that turns Telegram messages into Anki flashcards for spaced-repeti
 
 - **Structure by capability, not by type.** Each **use case is a folder** grouping the related **operations** of one capability; each operation is its own module. Never create cross-cutting `interactors/`, `dtos/`, or `ports/` folders that slice the layer by type. (Folder/module/interactor naming: see Naming.)
 - **Expose interactors through the folder's `__init__.py`:** re-export every interactor (`from .create_card import CreateCard`) and list it in `__all__`, so callers import from the use-case package (`from ankibot.application.manage_cards import CreateCard`), not from operation modules.
-- **Interactors (Command pattern):** one class per operation with an `execute` method (input DTO → output DTO / domain object), invoked from presentation, never the reverse. `execute` orchestrates that operation's own steps — port calls and business-logic calls (helper, anemic-model behavior, inline rule) — and returns a DTO. An interactor **never calls another interactor** and **never touches `infra`** (no HTTP/SQL/SDK clients); factor a shared step into a plain helper or a port/DTO under `application/common/`.
+- **Interactors (Command pattern):** one class per operation with an `execute` method (input DTO → output DTO / domain object), invoked from presentation, never the reverse. `execute` orchestrates that operation's own steps — port calls and business-logic calls (a domain function, a domain object's method, a local helper, an inline rule) — and returns a DTO. An interactor **never calls another interactor** and **never touches `infra`** (no HTTP/SQL/SDK clients); factor a shared step into a plain helper or a port/DTO under `application/common/`.
 - **Ports:** when an operation needs infra (persistence, cache, storage, auth, HTTP, external API), depend on a **port** — a `Protocol` named by role, free of transport/library specifics, defined here before any implementation; the adapter lives in `infra/`.
 - **Colocate ports and DTOs with the interactor that uses them** — by default in the operation's own module. Exceptions: shared by several interactors **within one use case** → a use-case-level module (`ports.py`, `dto.py`); shared **across use cases** → `application/common/` (DTOs under `application/common/dto/`). Never duplicate a shared port or DTO across use-case folders.
-- **Errors:** raise custom exceptions from `application/exceptions/`, not transport- or library-specific ones.
+- **Errors:** raise custom exceptions — from `application/exceptions/` for use-case failures, from `domain/errors.py` for rule violations — never transport- or library-specific ones.
 - To add a use case, prefer the `/add-use-case` skill.
 
 ## Domain model
 
-The domain is intentionally kept thin for now: business logic lives inside interactors, and there is no separate rich-entity layer. Do not introduce rich entities, domain factories, or value-object hierarchies preemptively.
+- **Placement test.** `ankibot/domain/` holds the rules that would survive replacing AnkiWeb with another flashcard backend. A rule shaped by one request, or by AnkiWeb's format, stays in `application/` or `infra/`.
+- **Ports stay out.** A port is written from a use case's need, not from the subject matter, so it lives in `application/` — even when it returns domain types.
+- **DTOs are shaped by a boundary; domain records are shaped by the subject.** A request body, a response, a read model assembled for one screen is a DTO and lives in `application/`. A structure that means something in the subject matter is a domain record and lives here — with or without methods. A record is not an entity.
+- **A domain rule never takes an application DTO.** The import direction settles it: give the rule plain values, or have the reader port return a domain type. Reach for the domain type only when a cluster of fields must travel together.
+- **Group by subject, not by type.** `domain/session.py`, `domain/scheduling.py` — never `value_objects/` or `entities/` folders.
+- **The domain stays small.** This bot mostly relays state it does not own: a card's life continues in AnkiWeb, not here. State we do not own never becomes an entity.
+- **Orchestration stays in `execute`.** Decisions taken on what a port returned cannot be extracted without dragging the ports along; they are covered through the handler.
+- **Rules get extracted.** Anything computable from data already in hand — parsing, validation, formatting, scheduling arithmetic — leaves `execute` and is unit-tested directly: into `domain/` when it passes the placement test, otherwise into a helper in the operation's own module.
+- **Raise from the interactor, not from the rule.** The rule answers a question; the interactor decides what to do with the answer.
 
-When a use case genuinely needs to carry state, add a plain **anemic model** — a dataclass that holds data with little or no behavior — under `application/`, and keep the rules that operate on it in the interactor. Reach for this only when a concrete need appears; for pure input/output shapes, prefer DTOs.
+### Which shape to reach for
+
+These are independent options, not a sequence to climb: an entity with no value objects is normal, and a domain of plain functions is a legitimate end state.
+
+| Reach for                                        | When                                                                                                           |
+| ------------------------------------------------ | -------------------------------------------------------------------------------------------------------------- |
+| a plain function                                 | the rule is computable from data in hand                                                                       |
+| a frozen dataclass with no validation (a record) | several fields travel together                                                                                 |
+| a value object validating in `__post_init__`     | **several correlated fields** carry an invariant that would otherwise be re-checked at every construction site |
+| an entity with behavior                          | **we own the state**: it has identity, a lifecycle, and transitions that can be violated                       |
+
+Default to the first two. A value object wrapping a single primitive is almost never worth its cost: a type alias (`type CardId = UUID`) names the concept, and a plain function validates at the one entry point where it matters. Do not populate the domain ahead of a rule that needs it.
 
 ## Presentation layer conventions
 
@@ -124,11 +144,20 @@ Tests are split first by what it takes to run them, then organized by capability
 - `tests/unit/` — pure Python, no transport, milliseconds. Run these while changing one feature.
 - `tests/integration/` — needs a simulated transport or an external process.
 
-Inside each level, group tests by the capability they cover, reusing source names (`tests/unit/anki_authentication/`, `tests/integration/infra/anki/`). Split at behavior granularity, not file granularity: one source module may warrant several test modules, one per operation or rule. Test-only infrastructure (`tests/common/fakes/`, fixtures, stubs) has no source counterpart and is placed where it reads best.
+Inside each level, group tests by the capability they cover, reusing source names (`tests/integration/bot/`, `tests/integration/infra/anki/`). Split at behavior granularity, not file granularity: one source module may warrant several test modules, one per operation or rule. Test-only infrastructure (`tests/common/fakes/`, fixtures, stubs) has no source counterpart and is placed where it reads best.
 
 Do not treat this as one-test-file-per-source-file, and do not create a test module just to mirror a source module that has no behavior of its own. Interactors are covered through the handler boundary rather than by isolating each one with mocked ports.
 
 Every test directory has an `__init__.py`; same-named test modules in different directories break collection otherwise.
+
+### What not to test
+
+Before writing a test, state the failure it would catch as a guarantee to the user. If the guarantee comes out as a description of the implementation, there is nothing to test. The naming rule below is the same filter: a test that does not fit `test_<actor>_<can|cannot>_<capability>` is usually a test of wiring, not of behavior.
+
+- **Never assert on a test double.** `fake.calls == 1`, `mock.assert_called_once()` assert that wiring happened, not that anything works — and they break on refactors that change nothing for the user.
+- **Delegation is not behavior.** A method that forwards to a collaborator and makes no decision has nothing to assert. Test it where the decision is made.
+- **Name the existing test that would fail** if this behavior broke. If one would, the new test is redundant: strengthen that test instead of adding beside it.
+- **When an interactor grows a rule worth many cases**, extract the rule into a plain function and unit-test the function (see Domain model). Do not reach for fake ports to get at it.
 
 ### Rules
 
@@ -136,17 +165,40 @@ Every test directory has an `__init__.py`; same-named test modules in different 
 - **Substitute as deep as possible.** Prefer replacing the transport under an adapter over replacing the adapter, and the adapter over the port — the less you replace, the more real code the test exercises. Fake a port only when the layer under test sits above it.
 - **Name test data builders for what they do** (`make_user`, `UserBuilder`), never after a production port — reusing a port's name for a builder makes the term mean two things.
 - **Prefer fakes over patching.** Reach for `monkeypatch` / `mock.patch` only when no fake is possible; never patch private internals.
+- **Never simulate the Telegram API.** Substitute at the session and assert on the outgoing method only — see The Telegram boundary below.
 - **Handler tests call the handler function directly**, passing a recording stub in place of `Message` and a real interactor built over a fake port. This covers the handler body — its error-to-reply mapping — but not filters, router registration or middleware.
 - **Never hit real external services.** Adapter tests use `httpx.MockTransport` with a handler that asserts on the outgoing request. Never build a config from environment credentials — a real AnkiWeb login from a test risks the account.
-- **Contract tests guard the parser, not the logic.** AnkiWeb's API is undocumented and can change without notice; a `MockTransport` test only proves the code agrees with our own assumptions about the protocol. Keep recorded real responses beside the adapter tests and parse them with the production parser. Mark them `@pytest.mark.contract`. Recorded payloads carry live tokens and session cookies — scrub before committing
+- **Record a real upstream response only when a fake would encode a guess.** A `MockTransport` test proves only that the code agrees with our own reading of AnkiWeb's undocumented API — but for a small message whose misreading fails loudly, a hand-built protobuf is equivalent to a recorded one, and cheaper. Recording earns its cost when both hold: we *interpret* the response rather than relay it, and a wrong assumption would fail *silently*, producing a wrong card instead of an exception. Read `docs/contract-testing.md` first — real responses carry live tokens, session cookies and user content.
 - **Never read `configs/config.yaml` in tests.** Construct the per-class config dataclass in a fixture with obviously-fake values.
-- **Assert behavior through `execute` / the handler boundary**, never private attributes.
+- **Assert behavior through the handler boundary**, never private attributes or test doubles.
 - **Cover failure paths**: every distinct exception branch and every alternative branch, not just the main scenario. Coverage is a floor, not the objective.
 - **Never let a secret reach a log.** Any adapter handling credentials or tokens gets a test that runs it at DEBUG level and asserts the secret is absent from `caplog.text`.
 - **Concurrency regressions are tests, not comments.** Anything touching shared mutable state (the process-wide httpx cookie jar, caches, sessions) gets a test running two operations under `asyncio.gather`. These bugs do not reproduce serially.
 - **Retry/backoff must be configurable to zero.** Any retry policy takes its attempt count and backoff from the adapter's config dataclass, so tests can set the base delay to `0.0` instead of really sleeping.
 - **Fixture scope**: expensive setup session-scoped, anything carrying state per-test.
 - Name tests `test_<actor>_<can|cannot>_<capability>`; give each a one-line docstring stating the guarantee, and structure the body with `# Arrange` / `# Act` / `# Assert`.
+
+### The Telegram boundary
+
+`tests/common/telegram.py` substitutes at the **session** — the last layer before the network — so `Bot`,
+`Message`, `Dispatcher` and the API method objects are all real. `RecordingSession` is a recorder, not a
+Telegram simulator, and it must not grow into one. That is where doubles of the Bot API itself fail: the
+double always answers "ok" while the real API rejects.
+
+- **Assert only what we sent, never what Telegram would answer.** A test may state that `/auth` emits this
+  `SendMessage` with this text. It may not state that Telegram accepts it.
+- **Scripted responses are for exceptions.** When `RecordingSession` grows a response queue, use it to inject
+  errors (`TelegramForbiddenError`, `TelegramRetryAfter`) and so cover *our* error-to-reply branches. To hand
+  a result back, queue a real aiogram object (`Message(...)`), never a hand-built dict standing in for an API
+  response.
+- **More than two scripted responses in one test is a stop signal** — the scenario has turned into a
+  simulation of Telegram. Extract the rule it is really about and unit-test that instead.
+- **Multi-step conversations are tested as logic, not as traffic.** Put FSM transitions in a plain function and
+  test the function; leave one thin dispatcher test for routing.
+
+These tests cannot catch, and must not claim to: HTML/parse-mode errors on real content, message and keyboard
+size limits, flood control, a blocked bot, or anything else the server decides. That confidence only comes from
+a real run against the Bot API test environment, which is out of scope for the suite today.
 
 ### Tooling triggers
 
@@ -168,5 +220,4 @@ When a trigger fires, add the tool for that one case — not across the suite re
 
 - `uv run pytest tests/unit` — fast, no transport; the default while changing one feature.
 - `uv run pytest tests/integration/infra/anki -k invalid_password` — focused selection.
-- `uv run pytest -m contract` — re-verify the parser against recorded payloads.
 - `uv run pytest` — before committing, and whenever the change touches ports, adapters or config.

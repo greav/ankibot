@@ -6,7 +6,7 @@ description: >-
 
 # Add a new adapter (port implementation)
 
-Infrastructure, Naming, and Configuration rules are in CLAUDE.md — follow them;
+Infrastructure, Naming, and Configuration rules are in AGENTS.md — follow them;
 this skill is only the procedure.
 
 1. **Identify the port** in `ankibot/application/` that this adapter implements.
@@ -34,5 +34,5 @@ this skill is only the procedure.
 5. **Wire it in `bootstrap/`:** construct the adapter from its config and inject it
    where the port is required.
 
-6. **Add tests**; provide a fake/in-memory adapter if it helps test the use case
-   in isolation.
+6. **Add tests**; provide a fake/in-memory adapter so the operations depending on
+   this port can be covered without real infrastructure.

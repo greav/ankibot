@@ -2,7 +2,7 @@ PROTO_SRC := $(shell find proto -name '*.proto')
 # Generated protobuf modules are not committed; the stamp tracks whether they are up to date.
 PROTO_STAMP := ankibot/infra/anki/pb/.stamp
 
-.PHONY: clean export_requirements compile_proto run test record_payload build_image run_container
+.PHONY: clean export_requirements compile_proto run test build_image run_container
 
 clean:
 	find . -type f -name "*.py[co]" -delete

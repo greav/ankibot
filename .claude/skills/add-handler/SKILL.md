@@ -6,7 +6,7 @@ description: >-
 
 # Add a new Telegram handler
 
-Presentation rules are in CLAUDE.md — follow them; this skill is only the procedure.
+Presentation rules are in AGENTS.md — follow them; this skill is only the procedure.
 A handler is a thin controller: no business logic.
 
 1. **Create** `ankibot/presentation/handlers/<name>.py` (e.g. `create_card.py`).

@@ -17,6 +17,21 @@ logger = logging.getLogger(__name__)
 _CONFIG_PATH_ENV = "CONFIG_PATH"
 
 
+def create_dispatcher(authenticate_anki: AuthenticateAnki) -> Dispatcher:
+    """Compose the dispatcher: routers in resolution order, plus the dependencies handlers ask for."""
+    dp = Dispatcher()
+
+    dp.include_router(start.router)
+    dp.include_router(authenticate.router)
+    dp.include_router(errors.router)
+
+    # aiogram injects handler arguments by parameter name, so this key is a contract with
+    # every handler declaring an ``authenticate_anki`` argument.
+    dp["authenticate_anki"] = authenticate_anki
+
+    return dp
+
+
 async def main() -> None:
     config_path = os.environ.get(_CONFIG_PATH_ENV)
     if config_path is None:
@@ -27,20 +42,15 @@ async def main() -> None:
 
     configure_root_logger(config.logger)
 
-    dp = Dispatcher()
     bot = Bot(token=config.bot.token)
 
-    dp.include_router(start.router)
-    dp.include_router(authenticate.router)
-    dp.include_router(errors.router)
-
     http_client = httpx.AsyncClient(timeout=15.0)
-    dp.shutdown.register(http_client.aclose)
-
     authenticate_anki = AuthenticateAnki(
         AnkiWebAuthenticator(config.anki_web, http_client),
     )
-    dp["authenticate_anki"] = authenticate_anki
+
+    dp = create_dispatcher(authenticate_anki)
+    dp.shutdown.register(http_client.aclose)
 
     await set_commands(bot)
 

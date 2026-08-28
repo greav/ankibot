@@ -1,0 +1,19 @@
+// Sliced from docs/ankiweb-svc.reference.proto — do not edit by hand beyond
+// re-slicing from the reference. Regenerate with `make compile_proto` and
+// commit the result whenever this file changes.
+
+syntax = "proto3";
+
+package ankiweb.svc;
+
+import "ankiweb/common.proto";
+
+// POST /svc/editor/get-info-for-adding
+message GetInfoForAddingRequest {}
+message GetInfoForAddingResponse {
+  repeated NotetypeNameId  notetypes           = 1;
+  repeated DeckNameId      decks               = 2;
+  int64                    current_deck_id     = 3;
+  int64                    current_notetype_id = 4;
+  repeated Notetype.Field  fields              = 5;
+}

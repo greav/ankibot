@@ -11,7 +11,8 @@ from ankibot.application.exceptions.anki import (
     AnkiInvalidPasswordError,
     AnkiInvalidUsernameError,
 )
-from ankibot.infra.anki.pb.ankiweb.account.login_pb2 import (
+from ankibot.infra.anki.protobuf import PROTOBUF_CONTENT_TYPE
+from ankiweb.account.login_pb2 import (
     LOGIN_RESPONSE_STATUS_AUTHENTICATED,
     LOGIN_RESPONSE_STATUS_INVALID_PASS,
     LOGIN_RESPONSE_STATUS_INVALID_USER,
@@ -20,8 +21,6 @@ from ankibot.infra.anki.pb.ankiweb.account.login_pb2 import (
 )
 
 logger = logging.getLogger(__name__)
-
-PROTOBUF_CONTENT_TYPE = "application/octet-stream"
 
 
 @dataclass(frozen=True, kw_only=True)

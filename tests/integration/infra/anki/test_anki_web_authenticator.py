@@ -10,7 +10,7 @@ from ankibot.application.exceptions.anki import (
     AnkiInvalidUsernameError,
 )
 from ankibot.infra.anki.authenticator import AnkiWebAuthenticator, AnkiWebAuthenticatorConfig
-from ankibot.infra.anki.pb.ankiweb.account.login_pb2 import (
+from ankiweb.account.login_pb2 import (
     LOGIN_RESPONSE_STATUS_AUTHENTICATED,
     LOGIN_RESPONSE_STATUS_INVALID_PASS,
     LOGIN_RESPONSE_STATUS_INVALID_USER,

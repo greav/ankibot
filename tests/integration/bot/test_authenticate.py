@@ -5,6 +5,9 @@ injection by parameter name on top of the handler body. A directly-called handle
 those three, so a typo in the filter would leave every test here green while the bot answers nothing.
 """
 
+import logging
+
+import pytest
 from aiogram import Dispatcher
 from aiogram.types import Update
 
@@ -82,3 +85,17 @@ async def test_user_can_see_a_retry_message_on_any_other_failure(
 
     # Assert
     assert session.last_answer == "Failed to authenticate with AnkiWeb. Please try again later."
+
+
+async def test_operator_can_see_the_reason_behind_a_generic_failure(
+    dispatcher: Dispatcher,
+    authenticator: FakeAnkiAuthenticator,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """The generic retry reply hides the reason from the user, but it still reaches the log."""
+    # Arrange / Act
+    with caplog.at_level(logging.WARNING):
+        await run_auth(dispatcher, authenticator, AnkiAuthenticationError("distinctive-boom-reason"))
+
+    # Assert
+    assert "distinctive-boom-reason" in caplog.text

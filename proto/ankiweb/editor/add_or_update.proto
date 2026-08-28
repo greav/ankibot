@@ -1,0 +1,25 @@
+// Sliced from docs/ankiweb-svc.reference.proto — do not edit by hand beyond
+// re-slicing from the reference. Regenerate with `make compile_proto` and
+// commit the result whenever this file changes.
+
+syntax = "proto3";
+
+package ankiweb.svc;
+
+// POST /svc/editor/add-or-update
+message AddOrUpdateRequest {
+  message AddMode {
+    int64 notetype_id = 1;
+    int64 deck_id     = 2;
+  }
+  message EditMode {
+    int64 note_id = 1;
+  }
+  repeated string fields = 1;
+  string          tags   = 2;
+  oneof mode {
+    AddMode  add  = 3;
+    EditMode edit = 4;
+  }
+}
+message AddOrUpdateResponse {}

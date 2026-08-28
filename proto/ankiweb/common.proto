@@ -1,0 +1,47 @@
+// Sliced from docs/ankiweb-svc.reference.proto — do not edit by hand beyond
+// re-slicing from the reference. Regenerate with `make compile_proto` and
+// commit the result whenever this file changes.
+
+syntax = "proto3";
+
+package ankiweb.svc;
+
+// Anki's generic uint32 wrapper (used for Notetype.Field.ord).
+message UInt32 {
+  uint32 val = 1;
+}
+
+// Notetype (only the Field / Field.Config subtree is referenced by the client)
+message Notetype {
+  message Field {
+    message Config {
+      bool   sticky              = 1;
+      bool   rtl                 = 2;
+      string font_name           = 3;
+      uint32 font_size           = 4;
+      string description         = 5;
+      bool   plain_text          = 6;
+      bool   collapsed           = 7;
+      bool   exclude_from_search = 8;
+      optional int64  id         = 9;
+      optional uint32 tag        = 10;
+      bool   prevent_deletion    = 11;
+      bytes  other               = 255;
+    }
+    UInt32 ord    = 1;
+    string name   = 2;
+    Config config = 5;
+  }
+}
+
+// Notetype id/name summary (Anki: NotetypeNameId).
+message NotetypeNameId {
+  int64  id   = 1;
+  string name = 2;
+}
+
+// Deck id/name summary (Anki: DeckNameId).
+message DeckNameId {
+  int64  id   = 1;
+  string name = 2;
+}

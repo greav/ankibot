@@ -24,7 +24,8 @@ async def authenticate_cmd_handler(message: Message, authenticate_anki: Authenti
         await message.answer("AnkiWeb rejected the configured username.")
     except AnkiInvalidPasswordError:
         await message.answer("AnkiWeb rejected the configured password.")
-    except ApplicationError:
+    except ApplicationError as error:
+        logger.warning("Failed to authenticate with AnkiWeb: %s", error)
         await message.answer("Failed to authenticate with AnkiWeb. Please try again later.")
     else:
         await message.answer("Authenticated with AnkiWeb.")

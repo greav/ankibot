@@ -109,7 +109,9 @@ To add an adapter, prefer the `/add-adapter` skill.
 - Write all comments and documentation in English.
 - Prefer clear names over comments; comment only non-obvious business logic or algorithms.
 - Use `typing` only for constructs with no built-in generic form (`Protocol`, `TypedDict`, `Literal`, etc.).
-- `ankibot/infra/anki/pb/**` is generated from `proto/` and is **not committed**. Never edit the generated
+- `ankiweb/**` (repo root, a sibling of `ankibot/`) is generated from `proto/` and is **not committed**.
+  It lives outside `ankibot/` so generated modules resolve each other by the plain top-level name protoc
+  always gives them (e.g. `ankiweb.common_pb2`), with no import-path juggling. Never edit the generated
   modules by hand — change the `.proto` and regenerate.
 
 ## Development workflow

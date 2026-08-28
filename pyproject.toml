@@ -50,7 +50,7 @@ verbose = false
 
 [tool.ruff]
 line-length = 119
-extend-exclude = ["ankibot/infra/anki/pb"]
+extend-exclude = ["ankiweb"]
 
 [tool.ruff.lint]
 select = [

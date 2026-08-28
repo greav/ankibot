@@ -35,16 +35,16 @@ ______________________________________________________________________
 
 ## Decks — deck management & publishing
 
-| Method | URL                           | Purpose                                               | Request                      | Response                  | Sliced                       |
-| ------ | ----------------------------- | ----------------------------------------------------- | ---------------------------- | ------------------------- | ---------------------------- |
-| POST   | `/svc/decks/deck-list-info`   | Deck tree with counts and collection/media sizes      | `DeckListInfoRequest`        | `DeckListInfoResponse`    | `decks/deck_list_info.proto` |
-| POST   | `/svc/decks/create-deck`      | Create a deck                                         | `CreateDeckRequest`          | `CreateDeckResponse` `{}` | —                            |
-| POST   | `/svc/decks/rename-deck`      | Rename a deck                                         | `RenameDeckRequest`          | `RenameDeckResponse`      | —                            |
-| POST   | `/svc/decks/remove-deck`      | Delete a deck                                         | `RemoveDeckRequest`          | `RemoveDeckResponse` `{}` | —                            |
-| POST   | `/svc/decks/select-deck`      | Set the current (active) deck                         | `SelectDeckRequest`          | `SelectDeckResponse` `{}` | —                            |
-| POST   | `/svc/decks/deck-share-info`  | Metadata for the deck-publishing form                 | `DeckShareInfoRequest`       | `DeckShareInfoResponse`   | —                            |
-| POST   | `/svc/decks/deck-share`       | Publish (share) a deck                                | `DeckShareRequest`           | `DeckShareResponse` `{}`  | —                            |
-| POST   | `/svc/decks/deck-share-state` | Poll the publishing state (WAITING / IN_PROGRESS / …) | `DeckShareStateRequest` `{}` | `DeckShareStateResponse`  | —                            |
+| Method | URL                           | Purpose                                               | Request                      | Response                  | Sliced |
+| ------ | ----------------------------- | ----------------------------------------------------- | ---------------------------- | ------------------------- | ------ |
+| POST   | `/svc/decks/deck-list-info`   | Deck tree with counts and collection/media sizes      | `DeckListInfoRequest`        | `DeckListInfoResponse`    | —      |
+| POST   | `/svc/decks/create-deck`      | Create a deck                                         | `CreateDeckRequest`          | `CreateDeckResponse` `{}` | —      |
+| POST   | `/svc/decks/rename-deck`      | Rename a deck                                         | `RenameDeckRequest`          | `RenameDeckResponse`      | —      |
+| POST   | `/svc/decks/remove-deck`      | Delete a deck                                         | `RemoveDeckRequest`          | `RemoveDeckResponse` `{}` | —      |
+| POST   | `/svc/decks/select-deck`      | Set the current (active) deck                         | `SelectDeckRequest`          | `SelectDeckResponse` `{}` | —      |
+| POST   | `/svc/decks/deck-share-info`  | Metadata for the deck-publishing form                 | `DeckShareInfoRequest`       | `DeckShareInfoResponse`   | —      |
+| POST   | `/svc/decks/deck-share`       | Publish (share) a deck                                | `DeckShareRequest`           | `DeckShareResponse` `{}`  | —      |
+| POST   | `/svc/decks/deck-share-state` | Poll the publishing state (WAITING / IN_PROGRESS / …) | `DeckShareStateRequest` `{}` | `DeckShareStateResponse`  | —      |
 
 ## Study — the review loop
 
@@ -57,12 +57,12 @@ ______________________________________________________________________
 
 ## Editor — creating & editing notes
 
-| Method | URL                               | Purpose                                                     | Request                        | Response                    | Sliced |
-| ------ | --------------------------------- | ----------------------------------------------------------- | ------------------------------ | --------------------------- | ------ |
-| POST   | `/svc/editor/add-or-update`       | Add a new note (AddMode) or edit an existing one (EditMode) | `AddOrUpdateRequest`           | `AddOrUpdateResponse` `{}`  | —      |
-| POST   | `/svc/editor/get-note-info`       | Get a note's contents for editing                           | `GetNoteInfoRequest`           | `GetNoteInfoResponse`       | —      |
-| POST   | `/svc/editor/get-info-for-adding` | Form data for adding: notetypes, decks, fields              | `GetInfoForAddingRequest` `{}` | `GetInfoForAddingResponse`  | —      |
-| POST   | `/svc/editor/get-notetype-fields` | Get the fields of a specific notetype                       | `GetNotetypeFieldsRequest`     | `GetNotetypeFieldsResponse` | —      |
+| Method | URL                               | Purpose                                                     | Request                        | Response                    | Sliced                             |
+| ------ | --------------------------------- | ----------------------------------------------------------- | ------------------------------ | --------------------------- | ---------------------------------- |
+| POST   | `/svc/editor/add-or-update`       | Add a new note (AddMode) or edit an existing one (EditMode) | `AddOrUpdateRequest`           | `AddOrUpdateResponse` `{}`  | `editor/add_or_update.proto`       |
+| POST   | `/svc/editor/get-note-info`       | Get a note's contents for editing                           | `GetNoteInfoRequest`           | `GetNoteInfoResponse`       | —                                  |
+| POST   | `/svc/editor/get-info-for-adding` | Form data for adding: notetypes, decks, fields              | `GetInfoForAddingRequest` `{}` | `GetInfoForAddingResponse`  | `editor/get_info_for_adding.proto` |
+| POST   | `/svc/editor/get-notetype-fields` | Get the fields of a specific notetype                       | `GetNotetypeFieldsRequest`     | `GetNotetypeFieldsResponse` | —                                  |
 
 ## Search
 

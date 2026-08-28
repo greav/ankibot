@@ -32,6 +32,7 @@ RUN pip install --no-cache-dir --no-deps -r requirements.txt
 
 COPY ankibot ankibot
 
-COPY --from=proto /build/out ankibot/infra/anki/pb
+# Sibling to ankibot/, not nested under it — see the PROTO_STAMP comment in the Makefile for why.
+COPY --from=proto /build/out/ankiweb ankiweb
 
 CMD ["python", "-m", "ankibot"]

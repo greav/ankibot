@@ -102,12 +102,12 @@ def make_bot(session: RecordingSession) -> Bot:
     return Bot(token=TEST_BOT_TOKEN, session=session)
 
 
-def make_message(bot: Bot, text: str = "") -> Message:
+def make_message(bot: Bot, text: str = "", *, chat_id: int = TEST_CHAT_ID, user_id: int = TEST_USER_ID) -> Message:
     """Build the incoming message a handler receives, bound to ``bot`` so replies reach its session."""
     return Message(
         message_id=1,
         date=datetime.now(UTC),
-        chat=Chat(id=TEST_CHAT_ID, type="private"),
-        from_user=User(id=TEST_USER_ID, is_bot=False, first_name="Test"),
+        chat=Chat(id=chat_id, type="private"),
+        from_user=User(id=user_id, is_bot=False, first_name="Test"),
         text=text,
     ).as_(bot)

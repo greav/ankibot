@@ -10,3 +10,7 @@ anki_web:
   password: ${oc.env:ANKI_PASSWORD}
   ankiweb_base_url: https://ankiweb.net
   ankiuser_base_url: https://ankiuser.net
+
+anki_card_gateway:
+  # Reuses anki_web's ankiuser_base_url so the two cannot drift apart.
+  ankiuser_base_url: ${anki_web.ankiuser_base_url}

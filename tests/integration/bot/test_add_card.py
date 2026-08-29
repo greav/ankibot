@@ -2,7 +2,8 @@
 handlers directly.
 
 Going through ``feed_update`` covers the command filters, router order (``/cancel`` winning inside
-a state) and aiogram's injection by parameter name on top of the handler bodies.
+a state, and the state-filtered deck callback winning over ``decks.router``) and aiogram's
+injection by parameter name on top of the handler bodies.
 """
 
 import asyncio
@@ -12,11 +13,20 @@ import pytest
 from aiogram import Dispatcher
 from aiogram.types import Update
 
-from ankibot.application.exceptions.anki import AnkiCardCreationError, AnkiSessionExpiredError
-from ankibot.application.manage_cards.create_card import AddTarget
+from ankibot.application.exceptions.anki import (
+    AnkiCardCreationError,
+    AnkiDeckListingError,
+    AnkiSessionExpiredError,
+)
 from ankibot.presentation.handlers.add_card import AddCard
+from ankibot.presentation.keyboards.decks import DeckCallback
 from tests.common.fakes.card_gateway import FakeCardGateway
-from tests.common.telegram import RecordingSession, make_bot, make_message
+from tests.common.fakes.deck_gateway import FakeDeckGateway
+from tests.common.fakes.selected_deck_store import FakeSelectedDeckStore
+from tests.common.telegram import RecordingSession, make_bot, make_callback_query, make_message
+
+DEFAULT_DECK_ID = 1
+SPANISH_DECK_ID = 2
 
 
 async def send(dispatcher: Dispatcher, session: RecordingSession, text: str, *, chat_id: int, user_id: int) -> None:
@@ -26,19 +36,47 @@ async def send(dispatcher: Dispatcher, session: RecordingSession, text: str, *, 
     await dispatcher.feed_update(bot, update)
 
 
-async def test_user_can_add_a_card(dispatcher: Dispatcher, card_gateway: FakeCardGateway) -> None:
-    """A full front/back dialog ends with a reply naming the deck the fake gateway reports as current."""
+async def pick_deck(
+    dispatcher: Dispatcher, session: RecordingSession, deck_id: int, *, chat_id: int, user_id: int
+) -> None:
+    """Tap a deck on the picker /addcard opens with."""
+    bot = make_bot(session)
+    callback = make_callback_query(bot, DeckCallback(id=deck_id).pack(), chat_id=chat_id, user_id=user_id)
+    await dispatcher.feed_update(bot, Update(update_id=2, callback_query=callback))
+
+
+async def test_user_can_add_a_card(dispatcher: Dispatcher) -> None:
+    """A full pick/front/back dialog ends with a reply naming the deck the card landed in."""
     # Arrange
-    card_gateway.target = AddTarget(deck_id=1, notetype_id=1, deck_name="Spanish", field_count=2)
     session = RecordingSession()
 
     # Act
     await send(dispatcher, session, "/addcard", chat_id=1, user_id=1)
+    await pick_deck(dispatcher, session, SPANISH_DECK_ID, chat_id=1, user_id=1)
     await send(dispatcher, session, "hola", chat_id=1, user_id=1)
     await send(dispatcher, session, "hello", chat_id=1, user_id=1)
 
     # Assert
-    assert session.answers == ["Send the front side.", "Send the back side.", "Card added to Spanish."]
+    assert session.edits == ["Deck: Spanish. Send the front side."]
+    assert session.answers == ["Choose a deck:", "Send the back side.", "Card added to Spanish."]
+
+
+async def test_user_can_choose_a_deck_while_adding_a_card(
+    dispatcher: Dispatcher, selected_decks: FakeSelectedDeckStore
+) -> None:
+    """The deck picked inside /addcard is remembered, so the next card lands there without re-picking."""
+    # Arrange
+    session = RecordingSession()
+
+    # Act
+    await send(dispatcher, session, "/addcard", chat_id=10, user_id=10)
+    await pick_deck(dispatcher, session, SPANISH_DECK_ID, chat_id=10, user_id=10)
+    await send(dispatcher, session, "hola", chat_id=10, user_id=10)
+    await send(dispatcher, session, "hello", chat_id=10, user_id=10)
+
+    # Assert
+    assert session.last_answer == "Card added to Spanish."
+    assert selected_decks.decks[10] == SPANISH_DECK_ID
 
 
 async def test_user_cannot_submit_an_empty_front(dispatcher: Dispatcher) -> None:
@@ -49,6 +87,7 @@ async def test_user_cannot_submit_an_empty_front(dispatcher: Dispatcher) -> None
 
     # Act
     await send(dispatcher, session, "/addcard", chat_id=2, user_id=2)
+    await pick_deck(dispatcher, session, DEFAULT_DECK_ID, chat_id=2, user_id=2)
     await send(dispatcher, session, "   ", chat_id=2, user_id=2)
 
     # Assert
@@ -63,12 +102,13 @@ async def test_user_cannot_add_a_card_without_authenticating(
 ) -> None:
     """A session-expired failure from AnkiWeb tells the user to authenticate, not a generic error."""
     # Arrange
-    card_gateway.error = AnkiSessionExpiredError()
     session = RecordingSession()
 
     # Act
     await send(dispatcher, session, "/addcard", chat_id=3, user_id=3)
+    await pick_deck(dispatcher, session, DEFAULT_DECK_ID, chat_id=3, user_id=3)
     await send(dispatcher, session, "front", chat_id=3, user_id=3)
+    card_gateway.error = AnkiSessionExpiredError()
     await send(dispatcher, session, "back", chat_id=3, user_id=3)
 
     # Assert
@@ -80,12 +120,13 @@ async def test_user_cannot_add_a_card_when_ankiweb_fails(
 ) -> None:
     """Any other AnkiWeb failure produces the generic retry message, not a stack trace."""
     # Arrange
-    card_gateway.error = AnkiCardCreationError()
     session = RecordingSession()
 
     # Act
     await send(dispatcher, session, "/addcard", chat_id=4, user_id=4)
+    await pick_deck(dispatcher, session, DEFAULT_DECK_ID, chat_id=4, user_id=4)
     await send(dispatcher, session, "front", chat_id=4, user_id=4)
+    card_gateway.error = AnkiCardCreationError()
     await send(dispatcher, session, "back", chat_id=4, user_id=4)
 
     # Assert
@@ -97,17 +138,55 @@ async def test_operator_can_see_the_reason_behind_a_generic_failure(
 ) -> None:
     """The generic retry reply hides the reason from the user, but it still reaches the log."""
     # Arrange
-    card_gateway.error = AnkiCardCreationError("distinctive-boom-reason")
     session = RecordingSession()
 
     # Act
     with caplog.at_level(logging.WARNING):
         await send(dispatcher, session, "/addcard", chat_id=9, user_id=9)
+        await pick_deck(dispatcher, session, DEFAULT_DECK_ID, chat_id=9, user_id=9)
         await send(dispatcher, session, "front", chat_id=9, user_id=9)
+        card_gateway.error = AnkiCardCreationError("distinctive-boom-reason")
         await send(dispatcher, session, "back", chat_id=9, user_id=9)
 
     # Assert
     assert "distinctive-boom-reason" in caplog.text
+
+
+async def test_user_cannot_add_a_card_to_a_deck_that_no_longer_exists(
+    dispatcher: Dispatcher, card_gateway: FakeCardGateway
+) -> None:
+    """A deck deleted between picking and sending the back side is named, not reported generically."""
+    # Arrange
+    session = RecordingSession()
+
+    # Act
+    await send(dispatcher, session, "/addcard", chat_id=12, user_id=12)
+    await pick_deck(dispatcher, session, SPANISH_DECK_ID, chat_id=12, user_id=12)
+    await send(dispatcher, session, "front", chat_id=12, user_id=12)
+    card_gateway.decks = {DEFAULT_DECK_ID: "Default"}
+    await send(dispatcher, session, "back", chat_id=12, user_id=12)
+
+    # Assert
+    assert session.last_answer == "That deck no longer exists in AnkiWeb. Run /decks again."
+
+
+async def test_user_cannot_start_adding_a_card_when_ankiweb_is_unreachable(
+    dispatcher: Dispatcher, deck_gateway: FakeDeckGateway
+) -> None:
+    """A failure fetching the decks ends /addcard immediately instead of opening a dialog."""
+    # Arrange
+    bot = make_bot(RecordingSession())
+    deck_gateway.error = AnkiDeckListingError()
+    session = RecordingSession()
+
+    # Act
+    await send(dispatcher, session, "/addcard", chat_id=13, user_id=13)
+
+    # Assert
+    assert session.last_answer == "Failed to reach AnkiWeb. Please try again later."
+    context = dispatcher.fsm.resolve_context(bot, chat_id=13, user_id=13)
+    assert context is not None
+    assert await context.get_state() is None
 
 
 async def test_user_cannot_add_a_card_to_a_notetype_without_two_fields(
@@ -115,11 +194,12 @@ async def test_user_cannot_add_a_card_to_a_notetype_without_two_fields(
 ) -> None:
     """A current notetype that isn't front/back-shaped tells the user to switch it, not a generic error."""
     # Arrange
-    card_gateway.target = AddTarget(deck_id=1, notetype_id=1, deck_name="Vocabulary", field_count=8)
+    card_gateway.field_count = 8
     session = RecordingSession()
 
     # Act
     await send(dispatcher, session, "/addcard", chat_id=8, user_id=8)
+    await pick_deck(dispatcher, session, DEFAULT_DECK_ID, chat_id=8, user_id=8)
     await send(dispatcher, session, "front", chat_id=8, user_id=8)
     await send(dispatcher, session, "back", chat_id=8, user_id=8)
 
@@ -137,16 +217,15 @@ async def test_user_can_cancel_mid_dialog(dispatcher: Dispatcher) -> None:
 
     # Act
     await send(dispatcher, session, "/addcard", chat_id=5, user_id=5)
+    await pick_deck(dispatcher, session, DEFAULT_DECK_ID, chat_id=5, user_id=5)
     await send(dispatcher, session, "/cancel", chat_id=5, user_id=5)
     await send(dispatcher, session, "just chatting", chat_id=5, user_id=5)
 
     # Assert
-    assert session.answers == ["Send the front side.", "Cancelled."]
+    assert session.answers == ["Choose a deck:", "Cancelled."]
 
 
-async def test_two_users_can_add_cards_concurrently_without_state_mixing(
-    dispatcher: Dispatcher, card_gateway: FakeCardGateway
-) -> None:
+async def test_two_users_can_add_cards_concurrently_without_state_mixing(dispatcher: Dispatcher) -> None:
     """Two users in the same chat run the dialog at once, and neither sees the other's step.
 
     Same ``chat_id``, different ``user_id`` — the default FSM strategy keys state by both, so this
@@ -154,12 +233,12 @@ async def test_two_users_can_add_cards_concurrently_without_state_mixing(
     against the real ``MemoryStorage`` behind ``dispatcher``.
     """
     # Arrange
-    card_gateway.target = AddTarget(deck_id=1, notetype_id=1, deck_name="Default", field_count=2)
     session_a = RecordingSession()
     session_b = RecordingSession()
 
     async def run_dialog(session: RecordingSession, user_id: int, front: str, back: str) -> None:
         await send(dispatcher, session, "/addcard", chat_id=6, user_id=user_id)
+        await pick_deck(dispatcher, session, DEFAULT_DECK_ID, chat_id=6, user_id=user_id)
         await send(dispatcher, session, front, chat_id=6, user_id=user_id)
         await send(dispatcher, session, back, chat_id=6, user_id=user_id)
 
@@ -170,6 +249,32 @@ async def test_two_users_can_add_cards_concurrently_without_state_mixing(
     )
 
     # Assert
-    expected = ["Send the front side.", "Send the back side.", "Card added to Default."]
+    expected = ["Choose a deck:", "Send the back side.", "Card added to Default."]
     assert session_a.answers == expected
     assert session_b.answers == expected
+
+
+async def test_two_users_can_keep_different_selected_decks(dispatcher: Dispatcher) -> None:
+    """Two concurrent dialogs in one chat each land their card in the deck that user picked.
+
+    A store keyed by chat rather than by user would show up here and nowhere else.
+    """
+    # Arrange
+    session_a = RecordingSession()
+    session_b = RecordingSession()
+
+    async def run_dialog(session: RecordingSession, user_id: int, deck_id: int) -> None:
+        await send(dispatcher, session, "/addcard", chat_id=7, user_id=user_id)
+        await pick_deck(dispatcher, session, deck_id, chat_id=7, user_id=user_id)
+        await send(dispatcher, session, "front", chat_id=7, user_id=user_id)
+        await send(dispatcher, session, "back", chat_id=7, user_id=user_id)
+
+    # Act
+    await asyncio.gather(
+        run_dialog(session_a, 20, DEFAULT_DECK_ID),
+        run_dialog(session_b, 21, SPANISH_DECK_ID),
+    )
+
+    # Assert
+    assert session_a.last_answer == "Card added to Default."
+    assert session_b.last_answer == "Card added to Spanish."

@@ -4,7 +4,7 @@ from omegaconf import OmegaConf
 from pydantic import TypeAdapter
 
 from ankibot.infra.anki.authenticator import AnkiWebAuthenticatorConfig
-from ankibot.infra.anki.card_gateway import AnkiWebCardGatewayConfig
+from ankibot.infra.anki.svc import AnkiSvcClientConfig
 from ankibot.infra.logger import LoggerConfig
 
 
@@ -18,7 +18,7 @@ class Config:
     bot: BotConfig
     logger: LoggerConfig
     anki_web: AnkiWebAuthenticatorConfig
-    anki_card_gateway: AnkiWebCardGatewayConfig
+    anki_svc: AnkiSvcClientConfig
 
 
 def load_config(path: str) -> Config:

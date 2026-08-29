@@ -11,6 +11,7 @@ anki_web:
   ankiweb_base_url: https://ankiweb.net
   ankiuser_base_url: https://ankiuser.net
 
-anki_card_gateway:
+anki_svc:
+  # Every /svc gateway (cards, decks) shares this one client.
   # Reuses anki_web's ankiuser_base_url so the two cannot drift apart.
   ankiuser_base_url: ${anki_web.ankiuser_base_url}

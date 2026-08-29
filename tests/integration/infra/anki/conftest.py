@@ -1,7 +1,7 @@
 import pytest
 
 from ankibot.infra.anki.authenticator import AnkiWebAuthenticatorConfig
-from ankibot.infra.anki.card_gateway import AnkiWebCardGatewayConfig
+from ankibot.infra.anki.svc import AnkiSvcClientConfig
 
 
 @pytest.fixture(scope="session")
@@ -16,6 +16,6 @@ def anki_config() -> AnkiWebAuthenticatorConfig:
 
 
 @pytest.fixture(scope="session")
-def card_gateway_config() -> AnkiWebCardGatewayConfig:
-    """AnkiWebCardGateway adapter config, pointed at the same obviously-fake host as ``anki_config``."""
-    return AnkiWebCardGatewayConfig(ankiuser_base_url="https://ankiuser.net")
+def svc_config() -> AnkiSvcClientConfig:
+    """AnkiSvcClient config, pointed at the same obviously-fake host as ``anki_config``."""
+    return AnkiSvcClientConfig(ankiuser_base_url="https://ankiuser.net")

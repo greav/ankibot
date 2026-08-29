@@ -18,6 +18,7 @@ Telegram bot that turns Telegram messages into Anki flashcards for spaced-repeti
 - `ankibot/infra/` — infrastructure and external-service adapters (API clients, DB adapters, logging). Adapters implement the protocols defined in `application/`.
 - `ankibot/presentation/` — user-facing layer (Telegram commands and handlers).
   - `presentation/handlers/` holds message handlers; each handler module owns a `Router`.
+  - `presentation/keyboards/` holds router-free keyboard builders and callback-data factories shared by handler modules — a module owning a `Router` cannot be imported by another handler module without attaching it twice.
 - `ankibot/bootstrap/` — initialization and dependency injection. Dependencies are composed here and injected into handlers/services.
   - `bot.py` wires routers and startup;
   - `config.py` loads configuration via OmegaConf into the root `Config`.

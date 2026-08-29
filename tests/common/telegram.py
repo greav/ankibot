@@ -13,9 +13,9 @@ from typing import Any, cast, override
 
 from aiogram import Bot
 from aiogram.client.session.base import BaseSession
-from aiogram.methods import SendMessage, TelegramMethod
+from aiogram.methods import EditMessageText, SendMessage, TelegramMethod
 from aiogram.methods.base import TelegramType
-from aiogram.types import Chat, Message, User
+from aiogram.types import CallbackQuery, Chat, Message, User
 
 TEST_BOT_TOKEN = "42:TEST"
 TEST_CHAT_ID = 1
@@ -89,6 +89,23 @@ class RecordingSession(BaseSession):
         return [request.text for request in self.requests if isinstance(request, SendMessage)]
 
     @property
+    def edits(self) -> list[str]:
+        """The text of every message edit the bot sent, in order."""
+        return [
+            request.text
+            for request in self.requests
+            if isinstance(request, EditMessageText) and request.text is not None
+        ]
+
+    @property
+    def last_edit(self) -> str:
+        """The most recent edit; fails loudly when the handler edited nothing."""
+        if not self.edits:
+            msg = "Handler edited no message"
+            raise AssertionError(msg)
+        return self.edits[-1]
+
+    @property
     def last_answer(self) -> str:
         """The most recent reply; fails loudly when the handler stayed silent."""
         if not self.answers:
@@ -110,4 +127,25 @@ def make_message(bot: Bot, text: str = "", *, chat_id: int = TEST_CHAT_ID, user_
         chat=Chat(id=chat_id, type="private"),
         from_user=User(id=user_id, is_bot=False, first_name="Test"),
         text=text,
+    ).as_(bot)
+
+
+def make_callback_query(
+    bot: Bot,
+    data: str,
+    *,
+    chat_id: int = TEST_CHAT_ID,
+    user_id: int = TEST_USER_ID,
+    message_text: str = "Choose a deck:",
+) -> CallbackQuery:
+    """Build the tap a handler receives, over the real picker message it was attached to.
+
+    Fabricating input assumes nothing about how Telegram behaves; only reading a reply back would.
+    """
+    return CallbackQuery(
+        id="1",
+        from_user=User(id=user_id, is_bot=False, first_name="Test"),
+        chat_instance="1",
+        data=data,
+        message=make_message(bot, text=message_text, chat_id=chat_id, user_id=user_id),
     ).as_(bot)

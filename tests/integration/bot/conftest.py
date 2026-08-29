@@ -4,10 +4,19 @@ from aiogram.fsm.storage.memory import MemoryStorage
 
 from ankibot.application.anki_authentication import AuthenticateAnki
 from ankibot.application.manage_cards import CreateCard
-from ankibot.application.manage_cards.create_card import AddTarget
+from ankibot.application.manage_decks import Deck, ListDecks, SelectDeck
 from ankibot.bootstrap.bot import create_dispatcher
 from tests.common.fakes.anki_authenticator import FakeAnkiAuthenticator
 from tests.common.fakes.card_gateway import FakeCardGateway
+from tests.common.fakes.deck_gateway import FakeDeckGateway
+from tests.common.fakes.selected_deck_store import FakeSelectedDeckStore
+
+DEFAULT_DECKS = {1: "Default", 2: "Spanish"}
+DEFAULT_DECK_ID = 1
+
+
+def default_deck_list() -> list[Deck]:
+    return [Deck(id=deck_id, name=name) for deck_id, name in DEFAULT_DECKS.items()]
 
 
 @pytest.fixture(scope="session")
@@ -22,23 +31,44 @@ def authenticator() -> FakeAnkiAuthenticator:
 
 @pytest.fixture(scope="session")
 def card_gateway() -> FakeCardGateway:
-    """The fake behind the dispatcher's CreateCard interactor; a test sets ``target``/``error``
-    to steer its own run.
+    """The fake behind the dispatcher's CreateCard interactor; a test sets its fields to steer its own run.
 
     Session-scoped for the same reason as ``authenticator`` above; ``reset_card_gateway`` restores
     it before every test.
     """
-    return FakeCardGateway(target=AddTarget(deck_id=1, notetype_id=1, deck_name="Default", field_count=2))
+    return FakeCardGateway(decks=dict(DEFAULT_DECKS), current_deck_id=DEFAULT_DECK_ID)
 
 
 @pytest.fixture(scope="session")
-def dispatcher(authenticator: FakeAnkiAuthenticator, card_gateway: FakeCardGateway) -> Dispatcher:
+def deck_gateway() -> FakeDeckGateway:
+    """The fake behind the deck interactors; ``reset_deck_gateway`` restores it before every test."""
+    return FakeDeckGateway(decks=default_deck_list())
+
+
+@pytest.fixture(scope="session")
+def selected_decks() -> FakeSelectedDeckStore:
+    """The deck choices behind the dispatcher; ``reset_selected_decks`` clears them per test."""
+    return FakeSelectedDeckStore()
+
+
+@pytest.fixture(scope="session")
+def dispatcher(
+    authenticator: FakeAnkiAuthenticator,
+    card_gateway: FakeCardGateway,
+    deck_gateway: FakeDeckGateway,
+    selected_decks: FakeSelectedDeckStore,
+) -> Dispatcher:
     """The real dispatcher, composed exactly as the bot composes it.
 
     Built once per session because a handler module's ``Router`` is a module-level singleton:
     including it a second time raises ``RuntimeError: Router is already attached``.
     """
-    return create_dispatcher(AuthenticateAnki(authenticator), CreateCard(card_gateway))
+    return create_dispatcher(
+        AuthenticateAnki(authenticator),
+        CreateCard(card_gateway, selected_decks),
+        ListDecks(deck_gateway, selected_decks),
+        SelectDeck(deck_gateway, selected_decks),
+    )
 
 
 @pytest.fixture(autouse=True)
@@ -50,16 +80,32 @@ def reset_authenticator(authenticator: FakeAnkiAuthenticator) -> None:
 @pytest.fixture(autouse=True)
 def reset_card_gateway(card_gateway: FakeCardGateway) -> None:
     """Undo whatever the previous test asked the shared card gateway to do."""
-    card_gateway.target = AddTarget(deck_id=1, notetype_id=1, deck_name="Default", field_count=2)
+    card_gateway.decks = dict(DEFAULT_DECKS)
+    card_gateway.current_deck_id = DEFAULT_DECK_ID
+    card_gateway.notetype_id = 1
+    card_gateway.field_count = 2
     card_gateway.error = None
+
+
+@pytest.fixture(autouse=True)
+def reset_deck_gateway(deck_gateway: FakeDeckGateway) -> None:
+    """Undo whatever the previous test asked the shared deck gateway to do."""
+    deck_gateway.decks = default_deck_list()
+    deck_gateway.error = None
+
+
+@pytest.fixture(autouse=True)
+def reset_selected_decks(selected_decks: FakeSelectedDeckStore) -> None:
+    """Drop the deck choices the previous test made, so none leaks into this one."""
+    selected_decks.decks.clear()
 
 
 @pytest.fixture(autouse=True)
 def reset_fsm_storage(dispatcher: Dispatcher) -> None:
     """Install a fresh FSM storage before every test, so state cannot leak between tests.
 
-    Mandatory alongside the two resets above: the dispatcher is session-scoped only because
-    handler ``Router``s are module singletons, and a stale ``MemoryStorage`` would otherwise carry
-    one test's FSM state into the next.
+    Mandatory alongside the resets above: the dispatcher is session-scoped only because handler
+    ``Router``s are module singletons, and a stale ``MemoryStorage`` would otherwise carry one
+    test's FSM state into the next.
     """
     dispatcher.fsm.storage = MemoryStorage()

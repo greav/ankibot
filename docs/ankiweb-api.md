@@ -62,7 +62,7 @@ ______________________________________________________________________
 | POST   | `/svc/editor/add-or-update`       | Add a new note (AddMode) or edit an existing one (EditMode) | `AddOrUpdateRequest`           | `AddOrUpdateResponse` `{}`  | `editor/add_or_update.proto`       |
 | POST   | `/svc/editor/get-note-info`       | Get a note's contents for editing                           | `GetNoteInfoRequest`           | `GetNoteInfoResponse`       | —                                  |
 | POST   | `/svc/editor/get-info-for-adding` | Form data for adding: notetypes, decks, fields              | `GetInfoForAddingRequest` `{}` | `GetInfoForAddingResponse`  | `editor/get_info_for_adding.proto` |
-| POST   | `/svc/editor/get-notetype-fields` | Get the fields of a specific notetype                       | `GetNotetypeFieldsRequest`     | `GetNotetypeFieldsResponse` | —                                  |
+| POST   | `/svc/editor/get-notetype-fields` | Get the fields of a specific notetype                       | `GetNotetypeFieldsRequest`     | `GetNotetypeFieldsResponse` | `editor/get_notetype_fields.proto` |
 
 ## Search
 

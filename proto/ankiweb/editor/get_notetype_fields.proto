@@ -1,0 +1,17 @@
+// Sliced from docs/ankiweb-svc.reference.proto — do not edit by hand beyond
+// re-slicing from the reference. Regenerate with `make compile_proto` and
+// commit the result whenever this file changes.
+
+syntax = "proto3";
+
+package ankiweb.svc;
+
+import "ankiweb/common.proto";
+
+// POST /svc/editor/get-notetype-fields
+message GetNotetypeFieldsRequest {
+  int64 notetype_id = 1;
+}
+message GetNotetypeFieldsResponse {
+  repeated Notetype.Field fields = 1;
+}

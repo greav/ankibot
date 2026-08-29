@@ -2,17 +2,21 @@ import pytest
 from aiogram import Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
 
+from ankibot.application.add_vocabulary_word import GenerateCard, SaveCard
 from ankibot.application.anki_authentication import AuthenticateAnki
 from ankibot.application.manage_cards import CreateCard
 from ankibot.application.manage_decks import Deck, ListDecks, SelectDeck
 from ankibot.bootstrap.bot import create_dispatcher
 from tests.common.fakes.anki_authenticator import FakeAnkiAuthenticator
 from tests.common.fakes.card_gateway import FakeCardGateway
+from tests.common.fakes.card_generator import FakeCardGenerator
 from tests.common.fakes.deck_gateway import FakeDeckGateway
 from tests.common.fakes.selected_deck_store import FakeSelectedDeckStore
+from tests.common.fakes.vocabulary_card_gateway import DEFAULT_TEMPLATE, FakeVocabularyCardGateway
 
 DEFAULT_DECKS = {1: "Default", 2: "Spanish"}
 DEFAULT_DECK_ID = 1
+DEFAULT_GENERATED_VALUES = {"Word": "serendipity", "Meaning": "a pleasant surprise", "Example": "What a serendipity!"}
 
 
 def default_deck_list() -> list[Deck]:
@@ -52,11 +56,25 @@ def selected_decks() -> FakeSelectedDeckStore:
 
 
 @pytest.fixture(scope="session")
+def vocabulary_card_gateway() -> FakeVocabularyCardGateway:
+    """The fake behind GenerateCard/SaveCard; ``reset_vocabulary_card_gateway`` restores it per test."""
+    return FakeVocabularyCardGateway()
+
+
+@pytest.fixture(scope="session")
+def card_generator() -> FakeCardGenerator:
+    """The fake behind GenerateCard's LLM call; ``reset_card_generator`` restores it per test."""
+    return FakeCardGenerator(values=dict(DEFAULT_GENERATED_VALUES))
+
+
+@pytest.fixture(scope="session")
 def dispatcher(
     authenticator: FakeAnkiAuthenticator,
     card_gateway: FakeCardGateway,
     deck_gateway: FakeDeckGateway,
     selected_decks: FakeSelectedDeckStore,
+    vocabulary_card_gateway: FakeVocabularyCardGateway,
+    card_generator: FakeCardGenerator,
 ) -> Dispatcher:
     """The real dispatcher, composed exactly as the bot composes it.
 
@@ -68,6 +86,8 @@ def dispatcher(
         CreateCard(card_gateway, selected_decks),
         ListDecks(deck_gateway, selected_decks),
         SelectDeck(deck_gateway, selected_decks),
+        GenerateCard(vocabulary_card_gateway, card_generator),
+        SaveCard(vocabulary_card_gateway),
     )
 
 
@@ -98,6 +118,23 @@ def reset_deck_gateway(deck_gateway: FakeDeckGateway) -> None:
 def reset_selected_decks(selected_decks: FakeSelectedDeckStore) -> None:
     """Drop the deck choices the previous test made, so none leaks into this one."""
     selected_decks.decks.clear()
+
+
+@pytest.fixture(autouse=True)
+def reset_vocabulary_card_gateway(vocabulary_card_gateway: FakeVocabularyCardGateway) -> None:
+    """Undo whatever the previous test asked the shared vocabulary card gateway to do."""
+    vocabulary_card_gateway.deck_id = 1
+    vocabulary_card_gateway.deck_name = "English Words V2"
+    vocabulary_card_gateway.notetype_id = 1
+    vocabulary_card_gateway.template = DEFAULT_TEMPLATE
+    vocabulary_card_gateway.error = None
+
+
+@pytest.fixture(autouse=True)
+def reset_card_generator(card_generator: FakeCardGenerator) -> None:
+    """Undo whatever the previous test asked the shared card generator to do."""
+    card_generator.values = dict(DEFAULT_GENERATED_VALUES)
+    card_generator.error = None
 
 
 @pytest.fixture(autouse=True)

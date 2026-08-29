@@ -11,6 +11,7 @@ import logging
 
 import pytest
 from aiogram import Dispatcher
+from aiogram.methods import SendMessage
 from aiogram.types import Update
 
 from ankibot.application.exceptions.anki import (
@@ -211,9 +212,16 @@ async def test_user_cannot_add_a_card_to_a_notetype_without_two_fields(
 
 
 async def test_user_can_cancel_mid_dialog(dispatcher: Dispatcher) -> None:
-    """/cancel exits the dialog, and a following plain message is no longer treated as a card side."""
+    """/cancel exits the dialog, and a following plain message is no longer treated as a card side.
+
+    It is instead picked up by the vocabulary-word catch-all (see test_vocabulary_card.py) rather
+    than continuing /addcard, which is the guarantee this test states; a real ``sendMessage`` reply
+    is queued so that flow's own read of its preview's message id does not fail this test.
+    """
     # Arrange
+    bot = make_bot(RecordingSession())
     session = RecordingSession()
+    session.queue_response(SendMessage, make_message(bot, message_id=999, chat_id=5, user_id=5))
 
     # Act
     await send(dispatcher, session, "/addcard", chat_id=5, user_id=5)
@@ -222,7 +230,7 @@ async def test_user_can_cancel_mid_dialog(dispatcher: Dispatcher) -> None:
     await send(dispatcher, session, "just chatting", chat_id=5, user_id=5)
 
     # Assert
-    assert session.answers == ["Choose a deck:", "Cancelled."]
+    assert session.answers[:2] == ["Choose a deck:", "Cancelled."]
 
 
 async def test_two_users_can_add_cards_concurrently_without_state_mixing(dispatcher: Dispatcher) -> None:

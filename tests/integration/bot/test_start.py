@@ -15,4 +15,4 @@ async def test_user_can_see_what_to_do_after_start(dispatcher: Dispatcher) -> No
     await dispatcher.feed_update(bot, update)
 
     # Assert
-    assert session.last_answer == "Hi, send any message!"
+    assert session.last_answer == "Hi! Send an English word and I'll turn it into a flashcard for you."

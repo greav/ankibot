@@ -33,3 +33,7 @@ class AnkiCardCreationError(ApplicationError):
 
 class AnkiUnsupportedNotetypeError(AnkiCardCreationError):
     message = "AnkiWeb's current notetype doesn't have exactly two fields"
+
+
+class AnkiTemplateTargetNotFoundError(AnkiCardCreationError):
+    message = "The configured deck or notetype does not exist in AnkiWeb"

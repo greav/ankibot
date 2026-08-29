@@ -1,9 +1,11 @@
 import logging
 import os
+from collections.abc import Awaitable, Callable
 
 import httpx
 from aiogram import Bot, Dispatcher
 
+from ankibot.application.add_vocabulary_word import CardGenerator, GenerateCard, SaveCard
 from ankibot.application.anki_authentication import AuthenticateAnki
 from ankibot.application.manage_cards import CreateCard
 from ankibot.application.manage_decks import ListDecks, SelectDeck
@@ -11,12 +13,15 @@ from ankibot.infra.anki.authenticator import AnkiWebAuthenticator
 from ankibot.infra.anki.card_gateway import AnkiWebCardGateway
 from ankibot.infra.anki.deck_gateway import AnkiWebDeckGateway
 from ankibot.infra.anki.svc import AnkiSvcClient
+from ankibot.infra.anki.vocabulary_card_gateway import AnkiWebVocabularyCardGateway
+from ankibot.infra.llm.openai_client import build_openai_client
+from ankibot.infra.llm.vocabulary_card.openai_card_generator import OpenAICardGenerator
 from ankibot.infra.logger import configure_root_logger
 from ankibot.infra.selected_decks import InMemorySelectedDeckStore
 from ankibot.presentation.commands import set_commands
-from ankibot.presentation.handlers import add_card, authenticate, decks, errors, start
+from ankibot.presentation.handlers import add_card, authenticate, decks, errors, start, vocabulary_card
 
-from .config import load_config
+from .config import Config, load_config
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +33,8 @@ def create_dispatcher(
     create_card: CreateCard,
     list_decks: ListDecks,
     select_deck: SelectDeck,
+    generate_card: GenerateCard,
+    save_card: SaveCard,
 ) -> Dispatcher:
     """Compose the dispatcher: routers in resolution order, plus the dependencies handlers ask for."""
     dp = Dispatcher()
@@ -38,6 +45,9 @@ def create_dispatcher(
     # every other deck callback falls through to decks.router.
     dp.include_router(add_card.router)
     dp.include_router(decks.router)
+    # vocabulary_card's catch-all message handler must come after every command-specific router,
+    # or it would swallow /decks paging callbacks and any future command's plain-text steps.
+    dp.include_router(vocabulary_card.router)
     dp.include_router(errors.router)
 
     # aiogram injects handler arguments by parameter name, so these keys are a contract with
@@ -46,8 +56,18 @@ def create_dispatcher(
     dp["create_card"] = create_card
     dp["list_decks"] = list_decks
     dp["select_deck"] = select_deck
+    dp["generate_card"] = generate_card
+    dp["save_card"] = save_card
 
     return dp
+
+
+def _build_card_generator(config: Config) -> tuple[CardGenerator, Callable[[], Awaitable[None]]]:
+    """The generator for the configured provider, and the shutdown hook that closes its client."""
+    match config.card_generator.provider:
+        case "openai":
+            client = build_openai_client(config.openai_client)
+            return OpenAICardGenerator(config.openai_card_generator, client), client.close
 
 
 async def main() -> None:
@@ -73,8 +93,14 @@ async def main() -> None:
     list_decks = ListDecks(deck_gateway, selected_decks)
     select_deck = SelectDeck(deck_gateway, selected_decks)
 
-    dp = create_dispatcher(authenticate_anki, create_card, list_decks, select_deck)
+    vocabulary_gateway = AnkiWebVocabularyCardGateway(config.anki_vocabulary_cards, svc)
+    generator, close_generator = _build_card_generator(config)
+    generate_card = GenerateCard(vocabulary_gateway, generator)
+    save_card = SaveCard(vocabulary_gateway)
+
+    dp = create_dispatcher(authenticate_anki, create_card, list_decks, select_deck, generate_card, save_card)
     dp.shutdown.register(http_client.aclose)
+    dp.shutdown.register(close_generator)
 
     await set_commands(bot)
 

@@ -11,4 +11,4 @@ router = Router()
 
 @router.message(CommandStart())
 async def start_cmd_handler(message: Message) -> None:
-    await message.answer("Hi, send any message!")
+    await message.answer("Hi! Send an English word and I'll turn it into a flashcard for you.")

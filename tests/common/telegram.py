@@ -52,6 +52,15 @@ class RecordingSession(BaseSession):
     def __init__(self) -> None:
         super().__init__()
         self.requests: list[TelegramMethod[Any]] = []
+        self._queued_responses: dict[type[TelegramMethod[Any]], list[Any]] = {}
+
+    def queue_response(self, method: type[TelegramMethod[TelegramType]], response: TelegramType) -> None:
+        """Queue a real aiogram object to answer the next call to ``method`` this session receives.
+
+        Keyed by method type rather than call order: an unrelated call (e.g. ``SendChatAction``, whose
+        result no covered handler reads) never consumes a response queued for a different method.
+        """
+        self._queued_responses.setdefault(method, []).append(response)
 
     @override
     async def make_request(
@@ -60,9 +69,12 @@ class RecordingSession(BaseSession):
         method: TelegramMethod[TelegramType],
         timeout: int | None = None,
     ) -> TelegramType:
-        """Record the outgoing method and answer with a result that refuses to be read."""
+        """Record the outgoing method, answering with a queued response or one that refuses to be read."""
         self.requests.append(method)
 
+        queue = self._queued_responses.get(type(method))
+        if queue:
+            return cast("TelegramType", queue.pop(0))
         return cast("TelegramType", UnreadResult())
 
     @override
@@ -119,10 +131,17 @@ def make_bot(session: RecordingSession) -> Bot:
     return Bot(token=TEST_BOT_TOKEN, session=session)
 
 
-def make_message(bot: Bot, text: str = "", *, chat_id: int = TEST_CHAT_ID, user_id: int = TEST_USER_ID) -> Message:
-    """Build the incoming message a handler receives, bound to ``bot`` so replies reach its session."""
+def make_message(
+    bot: Bot, text: str = "", *, chat_id: int = TEST_CHAT_ID, user_id: int = TEST_USER_ID, message_id: int = 1
+) -> Message:
+    """Build a message bound to ``bot`` so replies reach its session.
+
+    Doubles as the incoming update a handler receives, and as a queued response for a call a handler
+    reads back (see ``RecordingSession.queue_response``) — ``message_id`` lets a test give the latter
+    a distinctive id.
+    """
     return Message(
-        message_id=1,
+        message_id=message_id,
         date=datetime.now(UTC),
         chat=Chat(id=chat_id, type="private"),
         from_user=User(id=user_id, is_bot=False, first_name="Test"),

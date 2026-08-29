@@ -15,3 +15,22 @@ anki_svc:
   # Every /svc gateway (cards, decks) shares this one client.
   # Reuses anki_web's ankiuser_base_url so the two cannot drift apart.
   ankiuser_base_url: ${anki_web.ankiuser_base_url}
+
+anki_vocabulary_cards:
+  # Where generated word cards go. The notetype's field names are read from AnkiWeb at
+  # runtime, so editing the notetype in Anki needs no change here.
+  deck_name: "English Words V2"
+  notetype_name: "English Words Context" # the NOTETYPE's name; not always the deck's
+
+card_generator:
+  provider: openai # the only adapter today; an anthropic branch slots in beside it
+
+openai_client:
+  api_key: ${oc.env:OPENAI_API_KEY}
+  base_url: https://api.openai.com/v1
+  timeout_seconds: 30.0
+  max_retries: 2
+
+openai_card_generator:
+  # Any model supporting json_schema structured outputs (the schema is sent strict).
+  model: ${oc.env:OPENAI_MODEL,gpt-4o-mini}

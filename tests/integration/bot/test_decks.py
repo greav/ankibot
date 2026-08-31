@@ -1,7 +1,7 @@
 """The /decks outcomes, driven through the composed dispatcher rather than by calling handlers.
 
 Going through ``feed_update`` covers the ``Command("decks")`` filter, the callback-data filters,
-router order and aiogram's injection by parameter name on top of the handler bodies.
+router order and dishka's injection of interactors and the user id on top of the handler bodies.
 """
 
 import logging
@@ -147,3 +147,28 @@ async def test_user_cannot_select_a_deck_that_no_longer_exists(
     # Assert
     assert session.last_edit == "That deck no longer exists in AnkiWeb. Run /decks again."
     assert USER_ID not in selected_decks.decks
+
+
+async def test_user_cannot_use_a_command_from_a_chat_that_hides_who_they_are(
+    dispatcher: Dispatcher,
+    selected_decks: FakeSelectedDeckStore,
+) -> None:
+    """A senderless update is told so, and leaves no deck choice behind for the next one to inherit.
+
+    The user id is resolved as a dependency, so the refusal happens before the handler body runs and
+    only the errors router can answer — which is the guarantee no unit test reaches.
+    """
+    # Arrange — a channel post and an anonymous group admin both arrive without a ``from_user``.
+    session = RecordingSession()
+    bot = make_bot(session)
+    update = Update(update_id=1, message=make_message(bot, text="/decks", chat_id=CHAT_ID, user_id=None))
+
+    # Act
+    await dispatcher.feed_update(bot, update)
+
+    # Assert
+    assert (
+        session.last_answer
+        == "I can't tell who you are here. Send the command from your own account in a private chat."
+    )
+    assert selected_decks.decks == {}

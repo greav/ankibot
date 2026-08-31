@@ -1,7 +1,7 @@
 """The word -> generated card dialog, driven through the composed dispatcher.
 
 Going through ``feed_update`` covers the catch-all's ``StateFilter``/router-order guarantees on top
-of the handler bodies, in particular that it stays out of /addcard's way (AGENTS.md).
+of the handler bodies, in particular that it stays out of /addcard's way.
 """
 
 import asyncio

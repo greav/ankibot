@@ -1,16 +1,17 @@
+from collections.abc import AsyncIterator
+
 import pytest
 from aiogram import Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
+from dishka import AsyncContainer
 
-from ankibot.application.add_vocabulary_word import GenerateCard, SaveCard
-from ankibot.application.anki_authentication import AuthenticateAnki
-from ankibot.application.manage_cards import CreateCard
-from ankibot.application.manage_decks import Deck, ListDecks, SelectDeck
+from ankibot.application.manage_decks import Deck
 from ankibot.bootstrap.bot import create_dispatcher
 from tests.common.fakes.anki_authenticator import FakeAnkiAuthenticator
 from tests.common.fakes.card_gateway import FakeCardGateway
 from tests.common.fakes.card_generator import FakeCardGenerator
 from tests.common.fakes.deck_gateway import FakeDeckGateway
+from tests.common.fakes.ports import make_fake_container
 from tests.common.fakes.selected_deck_store import FakeSelectedDeckStore
 from tests.common.fakes.vocabulary_card_gateway import DEFAULT_TEMPLATE, FakeVocabularyCardGateway
 
@@ -68,27 +69,35 @@ def card_generator() -> FakeCardGenerator:
 
 
 @pytest.fixture(scope="session")
-def dispatcher(
+async def container(
     authenticator: FakeAnkiAuthenticator,
     card_gateway: FakeCardGateway,
     deck_gateway: FakeDeckGateway,
     selected_decks: FakeSelectedDeckStore,
     vocabulary_card_gateway: FakeVocabularyCardGateway,
     card_generator: FakeCardGenerator,
-) -> Dispatcher:
+) -> AsyncIterator[AsyncContainer]:
+    """Production's interactor graph over the fakes above, validated as strictly as production is."""
+    container = make_fake_container(
+        authenticator=authenticator,
+        card_gateway=card_gateway,
+        deck_gateway=deck_gateway,
+        selected_decks=selected_decks,
+        vocabulary_card_gateway=vocabulary_card_gateway,
+        card_generator=card_generator,
+    )
+    yield container
+    await container.close()
+
+
+@pytest.fixture(scope="session")
+def dispatcher(container: AsyncContainer) -> Dispatcher:
     """The real dispatcher, composed exactly as the bot composes it.
 
     Built once per session because a handler module's ``Router`` is a module-level singleton:
     including it a second time raises ``RuntimeError: Router is already attached``.
     """
-    return create_dispatcher(
-        AuthenticateAnki(authenticator),
-        CreateCard(card_gateway, selected_decks),
-        ListDecks(deck_gateway, selected_decks),
-        SelectDeck(deck_gateway, selected_decks),
-        GenerateCard(vocabulary_card_gateway, card_generator),
-        SaveCard(vocabulary_card_gateway),
-    )
+    return create_dispatcher(container)
 
 
 @pytest.fixture(autouse=True)

@@ -8,6 +8,7 @@ from aiogram.filters import StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message
+from dishka import FromDishka
 
 from ankibot.application.add_vocabulary_word import GenerateCard, GenerateCardRequest, SaveCard, SaveCardRequest
 from ankibot.application.exceptions.anki import AnkiSessionExpiredError, AnkiTemplateTargetNotFoundError
@@ -102,7 +103,7 @@ async def _send_preview(message: Message, state: FSMContext, generate_card: Gene
 
 
 @router.message(StateFilter(None, WordCard.confirming), F.text, ~F.text.startswith("/"))
-async def word_handler(message: Message, state: FSMContext, generate_card: GenerateCard) -> None:
+async def word_handler(message: Message, state: FSMContext, generate_card: FromDishka[GenerateCard]) -> None:
     word = word_query(message.text)
     if word is None:
         return
@@ -116,8 +117,8 @@ async def generated_card_action_handler(
     callback: CallbackQuery,
     callback_data: GeneratedCardCallback,
     state: FSMContext,
-    generate_card: GenerateCard,
-    save_card: SaveCard,
+    generate_card: FromDishka[GenerateCard],
+    save_card: FromDishka[SaveCard],
 ) -> None:
     if callback_data.action == "cancel":
         await state.clear()

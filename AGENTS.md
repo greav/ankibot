@@ -21,7 +21,8 @@ Telegram bot that turns Telegram messages into Anki flashcards for spaced-repeti
   - `presentation/keyboards/` holds router-free keyboard builders and callback-data factories shared by handler modules — a module owning a `Router` cannot be imported by another handler module without attaching it twice.
 - `ankibot/bootstrap/` — initialization and dependency injection. Dependencies are composed here and injected into handlers/services.
   - `bot.py` wires routers and startup;
-  - `config.py` loads configuration via OmegaConf into the root `Config`.
+  - `config.py` loads configuration via OmegaConf into the root `Config`;
+  - `di/` holds the dishka container and its providers — see Dependency injection.
 
 ## Application layer conventions
 
@@ -62,23 +63,44 @@ Default to the first two. A value object wrapping a single primitive is almost n
 
 Each handler module creates its own `Router()` and registers handlers with decorators (e.g. `@router.message(CommandStart())`); routers are included in `bootstrap/bot.py` via `dp.include_router(<module>.router)`.
 
+Name a handler `<trigger>_handler` — `<command>_cmd_handler` for a slash command. The suffix marks an entry point: nothing in the codebase calls it, the dispatcher does.
+
 A handler is a thin controller with no business logic. For each request it should:
 
 1. build the input DTO from the incoming Telegram message,
 1. call the interactor for that operation (`interactor.execute(dto)`),
 1. map the returned DTO / domain object to a Telegram response.
 
+**Never read `from_user` in a handler.** `presentation/identity.py` is the one place that turns an update into a user id, and it refuses an update with no sender rather than filing it under a placeholder every such update would share.
+
 To add a handler, prefer the `/add-handler` skill so wiring into `bootstrap/bot.py` is not forgotten.
 
 ## Infrastructure layer conventions
 
 - Every adapter implements a protocol defined in `application/`. The interface is fixed by the use case; the adapter adapts to it.
-- **Inherit from the port explicitly.** An adapter must subclass the `Protocol` it implements (`class SqlAlchemyUserRepository(UserRepository):`), never rely on structural (implicit) conformance. Explicit inheritance makes the contract the adapter fulfills visible right at the class declaration.
+- **Inherit from the port explicitly.** An adapter must subclass the `Protocol` it implements (`class SqlAlchemyUserRepository(UserRepository):`), never rely on structural (implicit) conformance. Explicit inheritance makes the contract the adapter fulfills visible right at the class declaration, and it is what lets one `provide(WithParents[...])` line register the adapter under its port (see Dependency injection).
 - Use `ankibot/infra/logger.py` for all logging; follow existing patterns, no ad-hoc loggers.
 - Never log secrets or sensitive payloads: bot tokens, provider API keys, and user credentials must stay out of logs, and avoid dumping raw message text or file contents. Prefer stable structured fields (e.g. `user_id`, `chat_id`, `card_id`) over baking values into free-text log messages, so logs stay searchable and safe to retain.
 - Configurable adapters take their `config` dataclass argument (see Configuration below) **first** in `__init__`, before any other collaborators (clients, sessions, other adapters).
 
 To add an adapter, prefer the `/add-adapter` skill.
+
+## Dependency injection
+
+Dishka composes the graph; no class constructs its own collaborators. The container lives in `bootstrap/di/`: `container.py` builds it, `warm_up.py` resolves every port before polling, and `providers/` holds one provider per kind of factory — configuration, adapters, interactors, etc.
+
+The rules:
+
+- **`FromDishka` stops at `presentation/`.** Ports stay `Protocol`s and interactors stay plain classes with a typed `__init__`; neither imports dishka. Never call `container.get()` from an interactor — that is a service locator, which is the thing DI removes.
+- **A provider per kind of factory, not one per class.** Split one by feature only once its list stops fitting on a screen.
+- **A new adapter is one line:** `provide(WithParents[TheAdapter])`. Reach for a `@provide` method only when the factory has to choose between implementations or close a client.
+- **Anything holding a resource is provided by a generator** — `yield` it, then close it. Closing the container is the only shutdown hook; never register a second one on the dispatcher.
+- **Scopes:** `APP` for adapters and clients, `REQUEST` for interactors and for anything derived from the update. An interactor is REQUEST-scoped even while it is stateless, so a per-update unit of work will reach it without this file changing.
+- **`STRICT_VALIDATION` stays on**, in the test container as well as the production one.
+- **The root `Config` never enters the graph.** `ConfigProvider` takes it apart into the per-class dataclasses, so no factory below can ask for the root and reach into a section that is not its own.
+- **Hand a value in through a typed method, not through a `{type: value}` context mapping.** A method body is type-checked; a mapping's key and value mypy treats as unrelated, so a wrong entry there is silent. `from_context` is for what genuinely arrives per scope from outside: the Telegram update, via `AiogramProvider`.
+- **A new port goes into `warm_up` too.** The container is lazy, so a misconfigured adapter would otherwise reach the user as the errors router's generic reply rather than stop the bot on launch. Interactors stay out — REQUEST-scoped, so building one at startup proves nothing about the next.
+- **A new router is included above the `setup_dishka(...)` / `inject_router(dp)` pair** that closes `create_dispatcher` — handlers attached after it are never injected.
 
 ## Naming
 
@@ -102,7 +124,7 @@ To add an adapter, prefer the `/add-adapter` skill.
 - For each configurable class, define a config dataclass in the **same module** as the class (e.g. `OpenAIEmailSummarizerConfig` next to `OpenAIEmailSummarizer`). The constructor takes a single `config` argument of that type: `def __init__(self, config: ...Config): ...`.
 - **Every config dataclass is `@dataclass(frozen=True, kw_only=True)`** — immutable at runtime, constructed by name so field order isn't a positional contract.
 - **Don't duplicate config values as dataclass defaults.** `config.yaml` is the single source of truth: a field that is always set there must have **no** default in the config dataclass, otherwise the two drift. Give a field a default only when it is genuinely optional and omitted from `config.yaml`.
-- `bootstrap/config.py` imports every per-class config dataclass and aggregates them into the root `Config`. The bootstrap code loads `config.yaml`, instantiates `Config`, and passes the appropriate config object to each class that depends on it.
+- `bootstrap/config.py` imports every per-class config dataclass and aggregates them into the root `Config`. `ConfigProvider` then takes that `Config` apart — one typed method per dataclass — and hands each to whichever class asks for that type. No code routes a config object by hand, and no class below sees the root `Config`. A new configurable class needs one method there and nothing anywhere else.
 - `.env.example` lists every environment variable the bot requires, with placeholder values and no secrets — it's the checklist a developer copies to `.env`. Keep it in sync with `config.yaml`: when you add or remove an `${oc.env:VAR_NAME}` reference **without** a default, add or remove the matching key in `.env.example`.
 
 ## Code style
@@ -148,11 +170,11 @@ Tests are split first by what it takes to run them, then organized by capability
 - `tests/unit/` — pure Python, no transport, milliseconds. Extracted rules and domain logic, not the bot.
 - `tests/integration/` — needs a simulated transport, an external process, or the composed `Dispatcher`.
   The dispatcher qualifies even though no transport runs: what it covers is the wiring in
-  `bootstrap/bot.py` — router order, dependency injection by parameter name, the errors router — none of
+  `bootstrap/bot.py` — router order, dishka's injection into the handlers, the errors router — none of
   which a directly-called handler reaches. Handler behaviour is covered there for the same reason:
   going through the dispatcher is what puts the command filter and the injection under test.
 
-Inside each level, group tests by the capability they cover, reusing source names (`tests/integration/bot/` for the bot as `bootstrap/bot.py` composes it — routers, handlers and injected dependencies together — `tests/integration/infra/anki/` for `infra/anki/`, `tests/unit/handlers/` for what is left of `presentation/handlers/`). Two directories must never share a name for different sources. Split at behavior granularity, not file granularity: one source module may warrant several test modules, one per operation or rule. Test-only infrastructure (`tests/common/fakes/`, fixtures, stubs) has no source counterpart and is placed where it reads best.
+Inside each level, group tests by the capability they cover, reusing source names (`tests/integration/bot/` for the bot as `bootstrap/bot.py` composes it — routers, handlers and injected dependencies together — `tests/integration/infra/anki/` for `infra/anki/`, `tests/unit/handlers/` for what is left of `presentation/handlers/`, `tests/unit/presentation/` for the router-free modules at the `presentation/` root). Two directories must never share a name for different sources. Split at behavior granularity, not file granularity: one source module may warrant several test modules, one per operation or rule. Test-only infrastructure (`tests/common/fakes/`, fixtures, stubs) has no source counterpart and is placed where it reads best.
 
 Do not treat this as one-test-file-per-source-file, and do not create a test module just to mirror a source module that has no behavior of its own. Interactors are covered through the handler boundary rather than by isolating each one with mocked ports.
 
@@ -174,8 +196,9 @@ Before writing a test, state the failure it would catch as a guarantee to the us
 - **Name test data builders for what they do** (`make_user`, `UserBuilder`), never after a production port — reusing a port's name for a builder makes the term mean two things.
 - **Prefer fakes over patching.** Reach for `monkeypatch` / `mock.patch` only when no fake is possible; never patch private internals.
 - **Never simulate the Telegram API.** Substitute at the session and assert on the outgoing method only — see The Telegram boundary below.
-- **Handler tests go through the dispatcher.** Feed a real `Update` to the composed `Dispatcher` (`dispatcher.feed_update(bot, update)`) over a `Bot` whose session records instead of sending, with real interactors built over fake ports. One pass then covers the command filter, router order, aiogram's injection by parameter name and the handler body. A directly-called handler covers none of the first three, so a typo in `Command("auth")` leaves its tests green while the bot answers nothing.
-- **Assert which reply came back, never merely that one did.** A mismatched dependency key raises `TypeError` inside the handler call, and the errors router answers in its place — so "the bot said something" passes with the injection broken. While a reply is a bare literal, comparing the whole string is the plainest way to name it and reads as what the user gets. Once a reply carries an interpolated value, assert the fragment carrying that value instead of rebuilding the message — rebuilding it copies the format string into the test, and the mapping is then close to earning the extraction under Tooling triggers.
+- **Handler tests go through the dispatcher.** Feed a real `Update` to the composed `Dispatcher` (`dispatcher.feed_update(bot, update)`) over a `Bot` whose session records instead of sending, with real interactors resolved from a container whose ports are fakes. One pass then covers the command filter, router order, dishka's injection and the handler body. A directly-called handler covers none of the first three, so a typo in `Command("auth")` leaves its tests green while the bot answers nothing.
+- **The test container replaces ports, not the graph.** `tests/common/fakes/ports.py` composes production's own `InteractorProvider` and `IdentityProvider` with a `from_context` provider carrying the fakes, so what the tests exercise is the graph `main()` builds. Never rebuild the interactors by hand in a fixture — a hand-built copy passes while production's registration is missing.
+- **Assert which reply came back, never merely that one did.** Anything that escapes a handler — a failure resolving its dependencies included — is answered by the errors router in its place, so "the bot said something" passes with the handler wholly broken. While a reply is a bare literal, comparing the whole string is the plainest way to name it and reads as what the user gets. Once a reply carries an interpolated value, assert the fragment carrying that value instead of rebuilding the message — rebuilding it copies the format string into the test, and the mapping is then close to earning the extraction under Tooling triggers.
 - **Call a handler directly only for a branch no update can reach.** `unexpected_error_handler` on an update carrying no message is the standing example: reaching the errors router needs a handler that raises, and the bot registers none for callback queries or edited posts. Such a test goes in `tests/unit/handlers/` with a docstring saying why it is not in `tests/integration/bot/`.
 - **Never hit real external services.** Adapter tests use `httpx.MockTransport` with a handler that asserts on the outgoing request. Never build a config from environment credentials — a real AnkiWeb login from a test risks the account.
 - **Record a real upstream response only when a fake would encode a guess.** A `MockTransport` test proves only that the code agrees with our own reading of AnkiWeb's undocumented API — but for a small message whose misreading fails loudly, a hand-built protobuf is equivalent to a recorded one, and cheaper. Recording earns its cost when both hold: we *interpret* the response rather than relay it, and a wrong assumption would fail *silently*, producing a wrong card instead of an exception. Read `docs/contract-testing.md` first — real responses carry live tokens, session cookies and user content.
@@ -188,7 +211,7 @@ Before writing a test, state the failure it would catch as a guarantee to the us
 - **Fixture scope**: expensive setup session-scoped, anything carrying state per-test. One exception, and
   only this one: a handler module's `Router` is a module-level singleton, so a second `include_router`
   raises `RuntimeError: Router is already attached` and the dispatcher must be built once per session —
-  along with the fakes composed into it. A session-scoped fake carrying state pairs with an `autouse`
+  along with the container and the fakes composed into it. A session-scoped fake carrying state pairs with an `autouse`
   fixture that resets it before every test; without that reset, do not widen the scope. Every handler
   test shares that one dispatcher, so each new fake composed into it needs its own reset in the same
   place — one added without a reset leaks into every test that runs after it.

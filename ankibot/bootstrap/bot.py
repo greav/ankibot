@@ -1,42 +1,24 @@
 import logging
 import os
-from collections.abc import Awaitable, Callable
 
-import httpx
 from aiogram import Bot, Dispatcher
+from dishka import AsyncContainer
+from dishka.integrations.aiogram import inject_router, setup_dishka
 
-from ankibot.application.add_vocabulary_word import CardGenerator, GenerateCard, SaveCard
-from ankibot.application.anki_authentication import AuthenticateAnki
-from ankibot.application.manage_cards import CreateCard
-from ankibot.application.manage_decks import ListDecks, SelectDeck
-from ankibot.infra.anki.authenticator import AnkiWebAuthenticator
-from ankibot.infra.anki.card_gateway import AnkiWebCardGateway
-from ankibot.infra.anki.deck_gateway import AnkiWebDeckGateway
-from ankibot.infra.anki.svc import AnkiSvcClient
-from ankibot.infra.anki.vocabulary_card_gateway import AnkiWebVocabularyCardGateway
-from ankibot.infra.llm.openai_client import build_openai_client
-from ankibot.infra.llm.vocabulary_card.openai_card_generator import OpenAICardGenerator
+from ankibot.bootstrap.di import make_container, warm_up
 from ankibot.infra.logger import configure_root_logger
-from ankibot.infra.selected_decks import InMemorySelectedDeckStore
 from ankibot.presentation.commands import set_commands
 from ankibot.presentation.handlers import add_card, authenticate, decks, errors, start, vocabulary_card
 
-from .config import Config, load_config
+from .config import load_config
 
 logger = logging.getLogger(__name__)
 
 _CONFIG_PATH_ENV = "CONFIG_PATH"
 
 
-def create_dispatcher(
-    authenticate_anki: AuthenticateAnki,
-    create_card: CreateCard,
-    list_decks: ListDecks,
-    select_deck: SelectDeck,
-    generate_card: GenerateCard,
-    save_card: SaveCard,
-) -> Dispatcher:
-    """Compose the dispatcher: routers in resolution order, plus the dependencies handlers ask for."""
+def create_dispatcher(container: AsyncContainer) -> Dispatcher:
+    """Compose the dispatcher: routers in resolution order, over the container behind ``FromDishka``."""
     dp = Dispatcher()
 
     dp.include_router(start.router)
@@ -50,24 +32,14 @@ def create_dispatcher(
     dp.include_router(vocabulary_card.router)
     dp.include_router(errors.router)
 
-    # aiogram injects handler arguments by parameter name, so these keys are a contract with
-    # every handler declaring an ``authenticate_anki`` / ``create_card`` argument.
-    dp["authenticate_anki"] = authenticate_anki
-    dp["create_card"] = create_card
-    dp["list_decks"] = list_decks
-    dp["select_deck"] = select_deck
-    dp["generate_card"] = generate_card
-    dp["save_card"] = save_card
+    setup_dishka(container=container, router=dp)
+    # Injection is applied here rather than through ``setup_dishka(auto_inject=True)``: that variant
+    # defers it to ``dp.emit_startup``, which ``feed_update`` never reaches, so every handler test
+    # would run against handlers whose ``FromDishka`` arguments are still unfilled. Doing it eagerly
+    # also keeps it impossible to forget a per-handler ``@inject``.
+    inject_router(dp)
 
     return dp
-
-
-def _build_card_generator(config: Config) -> tuple[CardGenerator, Callable[[], Awaitable[None]]]:
-    """The generator for the configured provider, and the shutdown hook that closes its client."""
-    match config.card_generator.provider:
-        case "openai":
-            client = build_openai_client(config.openai_client)
-            return OpenAICardGenerator(config.openai_card_generator, client), client.close
 
 
 async def main() -> None:
@@ -82,25 +54,17 @@ async def main() -> None:
 
     bot = Bot(token=config.bot.token)
 
-    http_client = httpx.AsyncClient(timeout=15.0)
-    authenticate_anki = AuthenticateAnki(
-        AnkiWebAuthenticator(config.anki_web, http_client),
-    )
-    svc = AnkiSvcClient(config.anki_svc, http_client)
-    selected_decks = InMemorySelectedDeckStore()
-    deck_gateway = AnkiWebDeckGateway(svc)
-    create_card = CreateCard(AnkiWebCardGateway(svc), selected_decks)
-    list_decks = ListDecks(deck_gateway, selected_decks)
-    select_deck = SelectDeck(deck_gateway, selected_decks)
+    container = make_container(config)
+    try:
+        await warm_up(container)
+    except Exception:
+        await container.close()
+        raise
 
-    vocabulary_gateway = AnkiWebVocabularyCardGateway(config.anki_vocabulary_cards, svc)
-    generator, close_generator = _build_card_generator(config)
-    generate_card = GenerateCard(vocabulary_gateway, generator)
-    save_card = SaveCard(vocabulary_gateway)
-
-    dp = create_dispatcher(authenticate_anki, create_card, list_decks, select_deck, generate_card, save_card)
-    dp.shutdown.register(http_client.aclose)
-    dp.shutdown.register(close_generator)
+    dp = create_dispatcher(container)
+    # Closing the container finalizes every factory that yielded, so the HTTP and SDK clients go
+    # down with it; no adapter needs its own shutdown hook.
+    dp.shutdown.register(container.close)
 
     await set_commands(bot)
 

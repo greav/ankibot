@@ -1,6 +1,7 @@
 from aiogram import Router
 from aiogram.filters import Command
 from aiogram.types import CallbackQuery, Message
+from dishka import FromDishka
 
 from ankibot.application.exceptions.base import ApplicationError
 from ankibot.application.manage_decks import ListDecks, ListDecksRequest, SelectDeck
@@ -11,15 +12,18 @@ from ankibot.presentation.deck_picker import (
     edit_into,
     select_tapped_deck,
 )
+from ankibot.presentation.identity import TelegramUserId
 from ankibot.presentation.keyboards.decks import DeckCallback, DeckPageCallback, deck_keyboard, page_of
 
 router = Router()
 
 
 @router.message(Command("decks"))
-async def decks_cmd_handler(message: Message, list_decks: ListDecks) -> None:
-    user_id = message.from_user.id if message.from_user is not None else 0
-
+async def decks_cmd_handler(
+    message: Message,
+    list_decks: FromDishka[ListDecks],
+    user_id: FromDishka[TelegramUserId],
+) -> None:
     try:
         result = await list_decks.execute(ListDecksRequest(user_id=user_id))
     except ApplicationError as error:
@@ -38,10 +42,11 @@ async def decks_cmd_handler(message: Message, list_decks: ListDecks) -> None:
 async def deck_page_handler(
     callback: CallbackQuery,
     callback_data: DeckPageCallback,
-    list_decks: ListDecks,
+    list_decks: FromDishka[ListDecks],
+    user_id: FromDishka[TelegramUserId],
 ) -> None:
     try:
-        result = await list_decks.execute(ListDecksRequest(user_id=callback.from_user.id))
+        result = await list_decks.execute(ListDecksRequest(user_id=user_id))
     except ApplicationError as error:
         await edit_into(callback, deck_list_error_reply(error))
     else:
@@ -56,6 +61,7 @@ async def deck_page_handler(
 async def deck_selected_handler(
     callback: CallbackQuery,
     callback_data: DeckCallback,
-    select_deck: SelectDeck,
+    select_deck: FromDishka[SelectDeck],
+    user_id: FromDishka[TelegramUserId],
 ) -> None:
-    await select_tapped_deck(callback, callback_data.id, select_deck, lambda name: f"Deck set to {name}.")
+    await select_tapped_deck(callback, user_id, callback_data.id, select_deck, lambda name: f"Deck set to {name}.")

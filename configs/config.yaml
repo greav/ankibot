@@ -34,3 +34,10 @@ openai_client:
 openai_card_generator:
   # Any model supporting json_schema structured outputs (the schema is sent strict).
   model: ${oc.env:OPENAI_MODEL,gpt-4o-mini}
+
+openai_snippet_cards:
+  # Must support json_schema structured outputs AND image input: screenshots go to the model
+  # directly, there is no separate OCR step.
+  model: ${oc.env:OPENAI_MODEL,gpt-4o-mini}
+  # Upper bound on cards distilled from one snippet; the model may return fewer.
+  max_cards: 8

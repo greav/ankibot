@@ -4,7 +4,9 @@ from collections.abc import AsyncIterator
 
 import httpx
 from dishka import Provider, Scope, WithParents, provide
+from openai import AsyncOpenAI
 
+from ankibot.application.add_snippet_cards import SnippetCardsGenerator
 from ankibot.application.add_vocabulary_word import CardGenerator
 from ankibot.bootstrap.config import CardGeneratorConfig
 from ankibot.infra.anki.authenticator import AnkiWebAuthenticator
@@ -13,6 +15,10 @@ from ankibot.infra.anki.deck_gateway import AnkiWebDeckGateway
 from ankibot.infra.anki.svc import AnkiSvcClient
 from ankibot.infra.anki.vocabulary_card_gateway import AnkiWebVocabularyCardGateway
 from ankibot.infra.llm.openai_client import OpenAIClientConfig, build_openai_client
+from ankibot.infra.llm.snippet_cards.openai_snippet_cards_generator import (
+    OpenAISnippetCardsGenerator,
+    OpenAISnippetCardsGeneratorConfig,
+)
 from ankibot.infra.llm.vocabulary_card.openai_card_generator import OpenAICardGenerator, OpenAICardGeneratorConfig
 from ankibot.infra.selected_decks import InMemorySelectedDeckStore
 
@@ -40,15 +46,32 @@ class AdapterProvider(Provider):
             yield client
 
     @provide
-    async def card_generator(
+    async def openai_sdk_client(self, config: OpenAIClientConfig) -> AsyncIterator[AsyncOpenAI]:
+        """The one SDK client every OpenAI-backed generator shares; closed on container shutdown."""
+        client = build_openai_client(config)
+        yield client
+        await client.close()
+
+    @provide
+    def card_generator(
         self,
         choice: CardGeneratorConfig,
-        client_config: OpenAIClientConfig,
+        client: AsyncOpenAI,
         generator_config: OpenAICardGeneratorConfig,
-    ) -> AsyncIterator[CardGenerator]:
-        """The generator for the configured provider, with its SDK client closed on shutdown."""
+    ) -> CardGenerator:
+        """The vocabulary-card generator for the configured provider."""
         match choice.provider:
             case "openai":
-                client = build_openai_client(client_config)
-                yield OpenAICardGenerator(generator_config, client)
-                await client.close()
+                return OpenAICardGenerator(generator_config, client)
+
+    @provide
+    def snippet_cards_generator(
+        self,
+        choice: CardGeneratorConfig,
+        client: AsyncOpenAI,
+        generator_config: OpenAISnippetCardsGeneratorConfig,
+    ) -> SnippetCardsGenerator:
+        """The snippet-cards generator for the configured provider."""
+        match choice.provider:
+            case "openai":
+                return OpenAISnippetCardsGenerator(generator_config, client)

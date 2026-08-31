@@ -16,12 +16,11 @@ from ankibot.application.exceptions.base import ApplicationError
 from ankibot.application.exceptions.generation import CardGenerationError, CardGenerationUnavailableError
 from ankibot.presentation.deck_picker import AUTH_FIRST, edit_into
 from ankibot.presentation.keyboards.generated_card import GeneratedCardCallback, generated_card_keyboard
+from ankibot.presentation.message_kinds import word_query
 
 logger = logging.getLogger(__name__)
 
 router = Router()
-
-MAX_WORD_LENGTH = 64
 
 GENERATOR_UNAVAILABLE = "The card generator is unavailable. Please try again later."
 GENERATION_FAILED = "Couldn't generate a card for that word. Try again, or rephrase it."
@@ -31,20 +30,6 @@ CANCELLED = "Cancelled."
 
 class WordCard(StatesGroup):
     confirming = State()
-
-
-def word_query(text: str | None) -> str | None:
-    """Normalize a message into a word to look up, or None when it carries no usable query.
-
-    Rejects empty/whitespace-only text, command-like text and anything over ``MAX_WORD_LENGTH``, so a
-    mistyped command or a pasted paragraph does not silently become a lookup.
-    """
-    if text is None:
-        return None
-    stripped = text.strip()
-    if not stripped or stripped.startswith("/") or len(stripped) > MAX_WORD_LENGTH:
-        return None
-    return stripped
 
 
 def format_card_preview(deck_name: str, fields: Sequence[tuple[str, str]]) -> str:

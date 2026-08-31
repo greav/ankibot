@@ -13,9 +13,9 @@ from typing import Any, cast, override
 
 from aiogram import Bot
 from aiogram.client.session.base import BaseSession
-from aiogram.methods import EditMessageText, SendMessage, TelegramMethod
+from aiogram.methods import EditMessageText, GetFile, SendMessage, TelegramMethod
 from aiogram.methods.base import TelegramType
-from aiogram.types import CallbackQuery, Chat, Message, User
+from aiogram.types import CallbackQuery, Chat, File, Message, PhotoSize, User
 
 TEST_BOT_TOKEN = "42:TEST"
 TEST_CHAT_ID = 1
@@ -53,6 +53,7 @@ class RecordingSession(BaseSession):
         super().__init__()
         self.requests: list[TelegramMethod[Any]] = []
         self._queued_responses: dict[type[TelegramMethod[Any]], list[Any]] = {}
+        self._queued_downloads: list[bytes] = []
 
     def queue_response(self, method: type[TelegramMethod[TelegramType]], response: TelegramType) -> None:
         """Queue a real aiogram object to answer the next call to ``method`` this session receives.
@@ -77,6 +78,15 @@ class RecordingSession(BaseSession):
             return cast("TelegramType", queue.pop(0))
         return cast("TelegramType", UnreadResult())
 
+    def queue_download(self, content: bytes) -> None:
+        """Queue the bytes the next ``stream_content`` call serves.
+
+        Fabricating the user's own upload assumes nothing about how Telegram behaves — it is input,
+        like a fabricated ``Update``. Pair it with a queued ``GetFile`` response (see
+        ``queue_file_download``), which ``Bot.download`` calls first to learn the file's path.
+        """
+        self._queued_downloads.append(content)
+
     @override
     async def stream_content(
         self,
@@ -86,10 +96,11 @@ class RecordingSession(BaseSession):
         chunk_size: int = 65536,
         raise_for_status: bool = True,
     ) -> AsyncGenerator[bytes, None]:
-        """Refuse downloads: no covered flow reads files back from Telegram yet."""
-        msg = "RecordingSession does not serve file downloads"
-        raise NotImplementedError(msg)
-        yield b""  # Never reached; keeps this an async generator, as the base class declares.
+        """Serve a queued download, and refuse to invent one when nothing is queued."""
+        if not self._queued_downloads:
+            msg = "RecordingSession serves only queued file downloads (see queue_file_download)"
+            raise NotImplementedError(msg)
+        yield self._queued_downloads.pop(0)
 
     @override
     async def close(self) -> None:
@@ -155,6 +166,41 @@ def make_message(
         from_user=User(id=user_id, is_bot=False, first_name="Test") if user_id is not None else None,
         text=text,
     ).as_(bot)
+
+
+def make_photo_message(
+    bot: Bot,
+    *,
+    caption: str | None = None,
+    chat_id: int = TEST_CHAT_ID,
+    user_id: int = TEST_USER_ID,
+    message_id: int = 1,
+    file_id: str = "photo-file-1",
+) -> Message:
+    """Build a photo message bound to ``bot``, sizes ordered smallest-to-largest as Telegram sends them."""
+    return Message(
+        message_id=message_id,
+        date=datetime.now(UTC),
+        chat=Chat(id=chat_id, type="private"),
+        from_user=User(id=user_id, is_bot=False, first_name="Test"),
+        photo=[
+            PhotoSize(file_id=f"{file_id}-small", file_unique_id=f"{file_id}-small", width=90, height=51),
+            PhotoSize(file_id=file_id, file_unique_id=file_id, width=1280, height=720),
+        ],
+        caption=caption,
+    ).as_(bot)
+
+
+def queue_file_download(session: RecordingSession, content: bytes, *, file_id: str = "photo-file-1") -> None:
+    """Queue the getFile answer and the bytes ``Bot.download`` reads for one sent file.
+
+    The ``File`` is a real aiogram object for a method the handler genuinely reads back; the bytes
+    are the user's own upload — fabricated input, not an invented Telegram reply.
+    """
+    session.queue_response(
+        GetFile, File(file_id=file_id, file_unique_id=file_id, file_size=len(content), file_path=f"files/{file_id}")
+    )
+    session.queue_download(content)
 
 
 def make_callback_query(

@@ -16,6 +16,7 @@ from ankibot.infra.anki.authenticator import AnkiWebAuthenticatorConfig
 from ankibot.infra.anki.svc import AnkiSvcClientConfig
 from ankibot.infra.anki.vocabulary_card_gateway import AnkiWebVocabularyCardGatewayConfig
 from ankibot.infra.llm.openai_client import OpenAIClientConfig
+from ankibot.infra.llm.snippet_cards.openai_snippet_cards_generator import OpenAISnippetCardsGeneratorConfig
 from ankibot.infra.llm.vocabulary_card.openai_card_generator import OpenAICardGeneratorConfig
 
 
@@ -51,3 +52,7 @@ class ConfigProvider(Provider):
     @provide
     def openai_card_generator(self) -> OpenAICardGeneratorConfig:
         return self._config.openai_card_generator
+
+    @provide
+    def openai_snippet_cards(self) -> OpenAISnippetCardsGeneratorConfig:
+        return self._config.openai_snippet_cards

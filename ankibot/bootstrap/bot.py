@@ -8,7 +8,7 @@ from dishka.integrations.aiogram import inject_router, setup_dishka
 from ankibot.bootstrap.di import make_container, warm_up
 from ankibot.infra.logger import configure_root_logger
 from ankibot.presentation.commands import set_commands
-from ankibot.presentation.handlers import add_card, authenticate, decks, errors, start, vocabulary_card
+from ankibot.presentation.handlers import add_card, authenticate, decks, errors, snippet_cards, start, vocabulary_card
 
 from .config import load_config
 
@@ -27,6 +27,9 @@ def create_dispatcher(container: AsyncContainer) -> Dispatcher:
     # every other deck callback falls through to decks.router.
     dp.include_router(add_card.router)
     dp.include_router(decks.router)
+    # snippet_cards claims long text, photos and image documents; it must come before
+    # vocabulary_card, whose catch-all would otherwise consume every plain-text message first.
+    dp.include_router(snippet_cards.router)
     # vocabulary_card's catch-all message handler must come after every command-specific router,
     # or it would swallow /decks paging callbacks and any future command's plain-text steps.
     dp.include_router(vocabulary_card.router)

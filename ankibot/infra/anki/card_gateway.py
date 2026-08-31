@@ -1,8 +1,8 @@
 import logging
 from typing import override
 
+from ankibot.application.common.card_gateway import AddTarget, CardGateway
 from ankibot.application.exceptions.anki import AnkiCardCreationError, AnkiDeckNotFoundError
-from ankibot.application.manage_cards.create_card import AddTarget, CardGateway, CreateCardRequest
 from ankibot.infra.anki.svc import AnkiSvcClient
 from ankiweb.editor.add_or_update_pb2 import AddOrUpdateRequest, AddOrUpdateResponse
 from ankiweb.editor.get_info_for_adding_pb2 import GetInfoForAddingRequest, GetInfoForAddingResponse
@@ -47,9 +47,9 @@ class AnkiWebCardGateway(CardGateway):
         )
 
     @override
-    async def add_card(self, target: AddTarget, request: CreateCardRequest) -> None:
+    async def add_card(self, target: AddTarget, front: str, back: str) -> None:
         add_request = AddOrUpdateRequest(
-            fields=[request.front, request.back],
+            fields=[front, back],
             tags="",
             add=AddOrUpdateRequest.AddMode(notetype_id=target.notetype_id, deck_id=target.deck_id),
         )

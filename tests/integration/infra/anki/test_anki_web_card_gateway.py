@@ -3,12 +3,12 @@ import logging
 import httpx
 import pytest
 
+from ankibot.application.common.card_gateway import AddTarget
 from ankibot.application.exceptions.anki import (
     AnkiCardCreationError,
     AnkiDeckNotFoundError,
     AnkiSessionExpiredError,
 )
-from ankibot.application.manage_cards.create_card import AddTarget, CreateCardRequest
 from ankibot.infra.anki.card_gateway import AnkiWebCardGateway
 from ankibot.infra.anki.svc import AnkiSvcClient, AnkiSvcClientConfig
 from ankiweb.common_pb2 import DeckNameId, Notetype, NotetypeNameId, UInt32
@@ -104,7 +104,7 @@ async def test_gateway_can_add_a_card_to_the_current_target(svc_config: AnkiSvcC
         target = await gateway.add_target(None)
 
         # Act
-        await gateway.add_card(target, CreateCardRequest(user_id=1, front="front", back="back"))
+        await gateway.add_card(target, "front", "back")
 
     # Assert
     add_request = next(request for request in requests if request.url.path == "/svc/editor/add-or-update")
@@ -155,7 +155,7 @@ async def test_gateway_cannot_add_a_card_on_an_expired_session(svc_config: AnkiS
     async with client_for(handler) as client:
         gateway = AnkiWebCardGateway(AnkiSvcClient(svc_config, client))
         with pytest.raises(AnkiSessionExpiredError):
-            await gateway.add_card(target, CreateCardRequest(user_id=1, front="front", back="back"))
+            await gateway.add_card(target, "front", "back")
 
 
 async def test_gateway_cannot_read_the_add_target_on_an_http_error(
@@ -211,7 +211,7 @@ async def test_gateway_cannot_leak_card_text_into_the_logs(
 
         # Act
         with caplog.at_level(logging.DEBUG):
-            await gateway.add_card(target, CreateCardRequest(user_id=1, front=front, back=back))
+            await gateway.add_card(target, front, back)
 
     # Assert
     assert front not in caplog.text

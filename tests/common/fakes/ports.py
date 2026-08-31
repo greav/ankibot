@@ -12,10 +12,11 @@ handed out by a typed method, so mypy checks that what is registered under a por
 from dishka import STRICT_VALIDATION, AsyncContainer, Provider, Scope, make_async_container, provide
 from dishka.integrations.aiogram import AiogramProvider
 
+from ankibot.application.add_snippet_cards import SnippetCardsGenerator
 from ankibot.application.add_vocabulary_word import CardGenerator, VocabularyCardGateway
 from ankibot.application.anki_authentication.authenticate_anki import AnkiAuthenticator
+from ankibot.application.common.card_gateway import CardGateway
 from ankibot.application.common.selected_deck_store import SelectedDeckStore
-from ankibot.application.manage_cards.create_card import CardGateway
 from ankibot.application.manage_decks.ports import DeckGateway
 from ankibot.bootstrap.di.providers import IdentityProvider, InteractorProvider
 
@@ -34,6 +35,7 @@ class FakePortProvider(Provider):
         selected_decks: SelectedDeckStore,
         vocabulary_card_gateway: VocabularyCardGateway,
         card_generator: CardGenerator,
+        snippet_cards_generator: SnippetCardsGenerator,
     ) -> None:
         super().__init__()
         self._authenticator = authenticator
@@ -42,6 +44,7 @@ class FakePortProvider(Provider):
         self._selected_decks = selected_decks
         self._vocabulary_card_gateway = vocabulary_card_gateway
         self._card_generator = card_generator
+        self._snippet_cards_generator = snippet_cards_generator
 
     @provide
     def anki_authenticator(self) -> AnkiAuthenticator:
@@ -67,6 +70,10 @@ class FakePortProvider(Provider):
     def card_generator(self) -> CardGenerator:
         return self._card_generator
 
+    @provide
+    def snippet_cards_generator(self) -> SnippetCardsGenerator:
+        return self._snippet_cards_generator
+
 
 def make_fake_container(
     *,
@@ -76,6 +83,7 @@ def make_fake_container(
     selected_decks: SelectedDeckStore,
     vocabulary_card_gateway: VocabularyCardGateway,
     card_generator: CardGenerator,
+    snippet_cards_generator: SnippetCardsGenerator,
 ) -> AsyncContainer:
     """Build the test container over the given fakes, under the same validation production uses."""
     return make_async_container(
@@ -86,6 +94,7 @@ def make_fake_container(
             selected_decks=selected_decks,
             vocabulary_card_gateway=vocabulary_card_gateway,
             card_generator=card_generator,
+            snippet_cards_generator=snippet_cards_generator,
         ),
         InteractorProvider(),
         AiogramProvider(),

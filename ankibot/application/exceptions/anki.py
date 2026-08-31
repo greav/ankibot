@@ -37,3 +37,17 @@ class AnkiUnsupportedNotetypeError(AnkiCardCreationError):
 
 class AnkiTemplateTargetNotFoundError(AnkiCardCreationError):
     message = "The configured deck or notetype does not exist in AnkiWeb"
+
+
+class SnippetCardsPartiallySavedError(AnkiCardCreationError):
+    """AnkiWeb failed partway through a batch: ``saved`` of ``total`` cards made it into the deck.
+
+    Raised only once at least one card is in — an all-or-nothing failure propagates as the error
+    that caused it, so a session-expired first card still reads as "authenticate", not "partial".
+    """
+
+    def __init__(self, *, saved: int, total: int, deck_name: str) -> None:
+        self.saved = saved
+        self.total = total
+        self.deck_name = deck_name
+        super().__init__(f"Saved {saved} of {total} cards before AnkiWeb failed")

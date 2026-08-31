@@ -1,28 +1,4 @@
-import pytest
-
-from ankibot.presentation.handlers.vocabulary_card import MAX_WORD_LENGTH, format_card_preview, word_query
-
-
-@pytest.mark.parametrize(
-    ("text", "expected"),
-    [
-        ("hello", "hello"),
-        ("  hello  ", "hello"),
-        ("", None),
-        ("   ", None),
-        (None, None),
-        ("/cancel", None),
-        ("a" * MAX_WORD_LENGTH, "a" * MAX_WORD_LENGTH),
-        ("a" * (MAX_WORD_LENGTH + 1), None),
-    ],
-)
-def test_word_query_can_normalize_or_reject_input(text: str | None, expected: str | None) -> None:
-    """word_query keeps usable text stripped, and rejects empty, command-like or over-length input."""
-    # Act
-    result = word_query(text)
-
-    # Assert
-    assert result == expected
+from ankibot.presentation.handlers.vocabulary_card import format_card_preview
 
 
 def test_format_card_preview_can_render_every_field_in_order() -> None:

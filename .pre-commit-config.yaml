@@ -21,12 +21,13 @@ repos:
             "--no-hashes",
             "--output-file=requirements.txt",
           ]
-  - repo: https://github.com/codespell-project/codespell
-    rev: v2.4.1
+  - repo: local
     hooks:
       - id: codespell
-        additional_dependencies:
-          - tomli
+        name: codespell
+        entry: uv run codespell
+        language: system
+        types: [text]
   - repo: https://github.com/hukkin/mdformat
     rev: 0.7.22
     hooks:
@@ -35,10 +36,33 @@ repos:
         additional_dependencies:
           - mdformat-gfm # GitHub-flavored Markdown (tables, etc.)
           - mdformat-frontmatter # keep YAML frontmatter intact instead of eating it
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.11.13
+  - repo: local
     hooks:
-      - id: ruff-check # sort imports
-        args: ["--select", "I", "--fix"]
+      - id: ruff-check-imports
+        name: ruff check (sort imports)
+        entry: uv run ruff check --force-exclude --select I --fix
+        language: system
+        types_or: [python, pyi, jupyter]
+        require_serial: true
       - id: ruff-format
-      - id: ruff-check # lint
+        name: ruff format
+        entry: uv run ruff format --force-exclude
+        language: system
+        types_or: [python, pyi, jupyter]
+        require_serial: true
+      - id: ruff-check
+        name: ruff check
+        entry: uv run ruff check --force-exclude
+        language: system
+        types_or: [python, pyi, jupyter]
+        require_serial: true
+  - repo: local
+    hooks:
+      - id: lint-imports
+        name: import-linter
+        entry: uv run lint-imports
+        language: system
+        # Contracts are about the whole import graph, not the changed files — and the graph can
+        # be changed by editing `.importlinter` alone, which no file type would match.
+        pass_filenames: false
+        always_run: true

@@ -160,6 +160,8 @@ Quality checks — run before committing:
 - `uv run mypy ankibot tests` — type-check (strict-ish; keep it clean). `tests` is not optional: the
   `@override` rule on test doubles (see Testing) is enforced by nothing else.
 - `uv run codespell ankibot` — spell-check.
+- `uv run lint-imports` — check the layer contracts in `.importlinter`. A package without an
+  `__init__.py` is invisible to it, so every new source directory needs one.
 
 Skip these on read-only work or when unrelated user changes are staged and you only need a non-mutating check.
 

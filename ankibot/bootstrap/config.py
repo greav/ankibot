@@ -8,6 +8,7 @@ from ankibot.infra.anki.authenticator import AnkiWebAuthenticatorConfig
 from ankibot.infra.anki.svc import AnkiSvcClientConfig
 from ankibot.infra.anki.vocabulary_card_gateway import AnkiWebVocabularyCardGatewayConfig
 from ankibot.infra.llm.openai_client import OpenAIClientConfig
+from ankibot.infra.llm.snippet_cards.openai_snippet_cards_generator import OpenAISnippetCardsGeneratorConfig
 from ankibot.infra.llm.vocabulary_card.openai_card_generator import OpenAICardGeneratorConfig
 from ankibot.infra.logger import LoggerConfig
 
@@ -33,6 +34,7 @@ class Config:
     card_generator: CardGeneratorConfig
     openai_client: OpenAIClientConfig
     openai_card_generator: OpenAICardGeneratorConfig
+    openai_snippet_cards: OpenAISnippetCardsGeneratorConfig
 
 
 def load_config(path: str) -> Config:

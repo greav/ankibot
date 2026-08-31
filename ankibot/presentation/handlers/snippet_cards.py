@@ -1,0 +1,367 @@
+"""The snippet → generated cards dialog.
+
+A snippet enters two ways: implicitly — text longer than a word lookup, or an image — and
+explicitly through /snippet, whose waiting state takes text of any length. The generated cards are
+confirmed all-or-nothing under one Save/Regenerate/Cancel keyboard on the last preview message.
+"""
+
+import contextlib
+import logging
+from collections.abc import Sequence
+
+from aiogram import Bot, F, Router
+from aiogram.exceptions import TelegramBadRequest
+from aiogram.filters import Command, StateFilter
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
+from aiogram.types import CallbackQuery, Message
+from dishka import FromDishka
+
+from ankibot.application.add_snippet_cards import (
+    DraftCard,
+    GenerateCards,
+    GenerateSnippetCardsRequest,
+    SaveCards,
+    SaveSnippetCardsRequest,
+    Snippet,
+    SnippetImage,
+)
+from ankibot.application.exceptions.anki import (
+    AnkiDeckNotFoundError,
+    AnkiSessionExpiredError,
+    AnkiUnsupportedNotetypeError,
+    SnippetCardsPartiallySavedError,
+)
+from ankibot.application.exceptions.base import ApplicationError
+from ankibot.application.exceptions.generation import (
+    CardGenerationEmptyError,
+    CardGenerationError,
+    CardGenerationUnavailableError,
+)
+from ankibot.presentation.deck_picker import AUTH_FIRST, DECK_GONE, edit_into
+from ankibot.presentation.identity import TelegramUserId
+from ankibot.presentation.keyboards.generated_card import GeneratedCardCallback, generated_card_keyboard
+from ankibot.presentation.message_kinds import plain_text, snippet_text
+
+logger = logging.getLogger(__name__)
+
+router = Router()
+
+TELEGRAM_MESSAGE_LIMIT = 4096
+
+# Telegram recompresses every photo-style upload to JPEG; only a document keeps its own type.
+PHOTO_JPEG_MIME = "image/jpeg"
+
+SEND_A_SNIPPET = "Send a text snippet or a screenshot to make cards from."
+NOT_A_SNIPPET = "That doesn't look like a snippet. Send a text snippet or a screenshot."
+IMAGE_UNREADABLE = "Couldn't read that image. Please try again."
+GENERATOR_UNAVAILABLE = "The card generator is unavailable. Please try again later."
+GENERATION_FAILED = "Couldn't generate cards from that snippet. Try again, or send a different passage."
+NOTHING_TO_LEARN = "Couldn't find anything card-worthy in that snippet. Try a different passage."
+UNSUPPORTED_NOTETYPE = (
+    "AnkiWeb's current notetype isn't set up for a simple front/back card. "
+    "Switch to a two-field notetype (e.g. Basic) in AnkiWeb's editor and try again."
+)
+GENERIC_FAILURE = "Failed to add the cards to AnkiWeb. Please try again later."
+CANCELLED = "Cancelled."
+
+
+class SnippetCards(StatesGroup):
+    waiting_for_snippet = State()
+    confirming = State()
+
+
+def format_cards_preview(deck_name: str, cards: Sequence[DraftCard]) -> list[str]:
+    """Render the generated cards as preview texts, each within Telegram's message limit.
+
+    One message when everything fits; the confirmation keyboard goes on the last one either way,
+    so the whole batch is confirmed at once.
+    """
+    count = "1 card" if len(cards) == 1 else f"{len(cards)} cards"
+    current = f"Add {count} to {deck_name}?"
+    messages: list[str] = []
+    for index, card in enumerate(cards, start=1):
+        block = f"{index}. {card.front}\n— {card.back}"[:TELEGRAM_MESSAGE_LIMIT]
+        candidate = f"{current}\n\n{block}"
+        if len(candidate) > TELEGRAM_MESSAGE_LIMIT:
+            messages.append(current)
+            current = block
+        else:
+            current = candidate
+    messages.append(current)
+    return messages
+
+
+def format_saved(saved: int, deck_name: str) -> str:
+    """The confirmation the user gets once the whole batch is in."""
+    count = "1 card" if saved == 1 else f"{saved} cards"
+    return f"Added {count} to {deck_name}."
+
+
+def format_partial_save(error: SnippetCardsPartiallySavedError) -> str:
+    """The honest reply for a batch AnkiWeb accepted only part of."""
+    return (
+        f"Saved {error.saved} of {error.total} cards to {error.deck_name}, then AnkiWeb failed. "
+        "Resend the snippet to add the rest."
+    )
+
+
+async def _clear_previous_keyboard(message: Message, state: FSMContext) -> None:
+    """Best-effort strip the keyboard off a pending preview a new snippet is about to replace."""
+    data = await state.get_data()
+    preview_message_id = data.get("preview_message_id")
+    bot = message.bot
+    if preview_message_id is None or bot is None:
+        return
+    with contextlib.suppress(TelegramBadRequest):
+        await bot.edit_message_reply_markup(chat_id=message.chat.id, message_id=preview_message_id, reply_markup=None)
+
+
+async def _download_image(bot: Bot, file_id: str, mime_type: str) -> SnippetImage | None:
+    """Fetch the sent image's bytes, or None when Telegram hands nothing back."""
+    buffer = await bot.download(file_id)
+    if buffer is None:
+        return None
+    return SnippetImage(data=buffer.read(), mime_type=mime_type)
+
+
+async def _send_preview(
+    message: Message,
+    state: FSMContext,
+    generate_cards: GenerateCards,
+    user_id: TelegramUserId,
+    snippet: Snippet,
+    source: dict[str, str | None],
+) -> None:
+    """Generate cards for ``snippet`` and reply with their preview, or with the failure that stopped it.
+
+    ``source`` is what Regenerate rebuilds the snippet from — its text, or its image's ``file_id``
+    to re-download; the bytes themselves never enter FSM data.
+    """
+    bot = message.bot
+    if bot is not None:
+        await bot.send_chat_action(chat_id=message.chat.id, action="typing")
+
+    try:
+        result = await generate_cards.execute(GenerateSnippetCardsRequest(user_id=user_id, snippet=snippet))
+    except CardGenerationUnavailableError:
+        await state.clear()
+        await message.answer(GENERATOR_UNAVAILABLE)
+        return
+    except CardGenerationEmptyError:
+        await state.clear()
+        await message.answer(NOTHING_TO_LEARN)
+        return
+    except CardGenerationError:
+        await state.clear()
+        await message.answer(GENERATION_FAILED)
+        return
+    except AnkiSessionExpiredError:
+        await state.clear()
+        await message.answer(AUTH_FIRST)
+        return
+    except AnkiDeckNotFoundError:
+        await state.clear()
+        await message.answer(DECK_GONE)
+        return
+    except AnkiUnsupportedNotetypeError:
+        await state.clear()
+        await message.answer(UNSUPPORTED_NOTETYPE)
+        return
+    except ApplicationError as error:
+        logger.warning("Failed to generate snippet cards: %s", error)
+        await state.clear()
+        await message.answer(GENERIC_FAILURE)
+        return
+
+    *head, tail = format_cards_preview(result.deck_name, result.cards)
+    for text in head:
+        await message.answer(text)
+    preview = await message.answer(tail, reply_markup=generated_card_keyboard())
+    await state.set_state(SnippetCards.confirming)
+    await state.update_data(
+        {
+            "cards": [{"front": card.front, "back": card.back} for card in result.cards],
+            "preview_message_id": preview.message_id,
+            **source,
+        }
+    )
+
+
+async def _handle_image(
+    message: Message,
+    state: FSMContext,
+    generate_cards: GenerateCards,
+    user_id: TelegramUserId,
+    *,
+    file_id: str,
+    mime_type: str,
+) -> None:
+    """Download the sent image and run it through the preview flow, its caption as the hint."""
+    bot = message.bot
+    if bot is None:
+        return
+    await _clear_previous_keyboard(message, state)
+    image = await _download_image(bot, file_id, mime_type)
+    if image is None:
+        await state.clear()
+        await message.answer(IMAGE_UNREADABLE)
+        return
+    hint = plain_text(message.caption)
+    snippet = Snippet(image=image, hint=hint)
+    source: dict[str, str | None] = {"text": None, "file_id": file_id, "mime_type": mime_type, "hint": hint}
+    await _send_preview(message, state, generate_cards, user_id, snippet, source)
+
+
+@router.message(Command("snippet"))
+async def snippet_cmd_handler(message: Message, state: FSMContext) -> None:
+    await _clear_previous_keyboard(message, state)
+    await state.set_state(SnippetCards.waiting_for_snippet)
+    await message.answer(SEND_A_SNIPPET)
+
+
+@router.message(StateFilter(None, SnippetCards.confirming), F.text.func(snippet_text).as_("snippet"))
+async def snippet_text_handler(
+    message: Message,
+    snippet: str,
+    state: FSMContext,
+    generate_cards: FromDishka[GenerateCards],
+    user_id: FromDishka[TelegramUserId],
+) -> None:
+    # The filter claims only what ``snippet_text`` accepts, so a short word falls through to the
+    # vocabulary-word router behind this one.
+    await _clear_previous_keyboard(message, state)
+    source: dict[str, str | None] = {"text": snippet, "file_id": None, "mime_type": None, "hint": None}
+    await _send_preview(message, state, generate_cards, user_id, Snippet(text=snippet), source)
+
+
+@router.message(SnippetCards.waiting_for_snippet, F.text)
+async def awaited_snippet_handler(
+    message: Message,
+    state: FSMContext,
+    generate_cards: FromDishka[GenerateCards],
+    user_id: FromDishka[TelegramUserId],
+) -> None:
+    # /snippet has been sent, so any usable length qualifies — this is the short passage's door.
+    text = plain_text(message.text)
+    if text is None:
+        await message.answer(NOT_A_SNIPPET)
+        return
+    source: dict[str, str | None] = {"text": text, "file_id": None, "mime_type": None, "hint": None}
+    await _send_preview(message, state, generate_cards, user_id, Snippet(text=text), source)
+
+
+@router.message(
+    StateFilter(None, SnippetCards.waiting_for_snippet, SnippetCards.confirming),
+    F.photo,
+)
+async def snippet_photo_handler(
+    message: Message,
+    state: FSMContext,
+    generate_cards: FromDishka[GenerateCards],
+    user_id: FromDishka[TelegramUserId],
+) -> None:
+    if not message.photo:
+        return
+    # The last PhotoSize is the largest one Telegram offers.
+    file_id = message.photo[-1].file_id
+    await _handle_image(message, state, generate_cards, user_id, file_id=file_id, mime_type=PHOTO_JPEG_MIME)
+
+
+@router.message(
+    StateFilter(None, SnippetCards.waiting_for_snippet, SnippetCards.confirming),
+    F.document.mime_type.startswith("image/"),
+)
+async def snippet_document_handler(
+    message: Message,
+    state: FSMContext,
+    generate_cards: FromDishka[GenerateCards],
+    user_id: FromDishka[TelegramUserId],
+) -> None:
+    document = message.document
+    if document is None or document.mime_type is None:
+        return
+    await _handle_image(
+        message, state, generate_cards, user_id, file_id=document.file_id, mime_type=document.mime_type
+    )
+
+
+@router.callback_query(GeneratedCardCallback.filter(), SnippetCards.confirming)
+async def snippet_cards_action_handler(
+    callback: CallbackQuery,
+    callback_data: GeneratedCardCallback,
+    state: FSMContext,
+    generate_cards: FromDishka[GenerateCards],
+    save_cards: FromDishka[SaveCards],
+    user_id: FromDishka[TelegramUserId],
+) -> None:
+    if callback_data.action == "cancel":
+        await state.clear()
+        await edit_into(callback, CANCELLED)
+    elif callback_data.action == "regenerate":
+        await _regenerate(callback, state, generate_cards, user_id)
+    else:
+        await _save(callback, state, save_cards, user_id)
+
+    await callback.answer()
+
+
+async def _regenerate(
+    callback: CallbackQuery, state: FSMContext, generate_cards: GenerateCards, user_id: TelegramUserId
+) -> None:
+    """Rebuild the snippet from FSM data — re-downloading an image by its file_id — and re-preview."""
+    if not isinstance(callback.message, Message):
+        return
+    message = callback.message
+    bot = message.bot
+    data = await state.get_data()
+    hint: str | None = data.get("hint")
+    text: str | None = data.get("text")
+
+    if text is not None:
+        snippet = Snippet(text=text, hint=hint)
+        source: dict[str, str | None] = {"text": text, "file_id": None, "mime_type": None, "hint": hint}
+    else:
+        file_id: str | None = data.get("file_id")
+        mime_type: str | None = data.get("mime_type")
+        if file_id is None or mime_type is None or bot is None:
+            return
+        image = await _download_image(bot, file_id, mime_type)
+        if image is None:
+            await state.clear()
+            await edit_into(callback, IMAGE_UNREADABLE)
+            return
+        snippet = Snippet(image=image, hint=hint)
+        source = {"text": None, "file_id": file_id, "mime_type": mime_type, "hint": hint}
+
+    await message.edit_reply_markup(reply_markup=None)
+    await _send_preview(message, state, generate_cards, user_id, snippet, source)
+
+
+async def _save(callback: CallbackQuery, state: FSMContext, save_cards: SaveCards, user_id: TelegramUserId) -> None:
+    """Save the confirmed batch, answering with exactly what made it into AnkiWeb."""
+    data = await state.get_data()
+    stored: list[dict[str, str]] = data.get("cards", [])
+    cards = tuple(DraftCard(front=item["front"], back=item["back"]) for item in stored)
+
+    try:
+        result = await save_cards.execute(SaveSnippetCardsRequest(user_id=user_id, cards=cards))
+    except AnkiSessionExpiredError:
+        await state.clear()
+        await edit_into(callback, AUTH_FIRST)
+    except AnkiDeckNotFoundError:
+        await state.clear()
+        await edit_into(callback, DECK_GONE)
+    except AnkiUnsupportedNotetypeError:
+        await state.clear()
+        await edit_into(callback, UNSUPPORTED_NOTETYPE)
+    except SnippetCardsPartiallySavedError as error:
+        await state.clear()
+        await edit_into(callback, format_partial_save(error))
+    except ApplicationError as error:
+        logger.warning("Failed to save snippet cards to AnkiWeb: %s", error)
+        await state.clear()
+        await edit_into(callback, GENERIC_FAILURE)
+    else:
+        await state.clear()
+        await edit_into(callback, format_saved(result.saved, result.deck_name))

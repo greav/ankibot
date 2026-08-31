@@ -11,3 +11,7 @@ class CardGenerationUnavailableError(CardGenerationError):
 
 class CardGenerationIncompleteError(CardGenerationError):
     message = "The generator did not fill every field"
+
+
+class CardGenerationEmptyError(CardGenerationError):
+    message = "The generator found nothing to make cards from"

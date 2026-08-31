@@ -13,10 +13,11 @@ from typing import Any
 
 from dishka import AsyncContainer
 
+from ankibot.application.add_snippet_cards import SnippetCardsGenerator
 from ankibot.application.add_vocabulary_word import CardGenerator, VocabularyCardGateway
 from ankibot.application.anki_authentication.authenticate_anki import AnkiAuthenticator
+from ankibot.application.common.card_gateway import CardGateway
 from ankibot.application.common.selected_deck_store import SelectedDeckStore
-from ankibot.application.manage_cards.create_card import CardGateway
 from ankibot.application.manage_decks.ports import DeckGateway
 
 # Every port the bot talks through — the same set ``tests/common/fakes/ports.py`` substitutes.
@@ -30,6 +31,7 @@ _PORTS: tuple[Any, ...] = (
     SelectedDeckStore,
     VocabularyCardGateway,
     CardGenerator,
+    SnippetCardsGenerator,
 )
 
 

@@ -1,7 +1,7 @@
 """The /auth outcomes, each driven through the composed dispatcher rather than by calling the handler.
 
 Going through ``feed_update`` covers the ``Command("auth")`` filter, router order and aiogram's
-injection by parameter name on top of the handler body. A directly-called handler covers none of
+injection of the interactor on top of the handler body. A directly-called handler covers none of
 those three, so a typo in the filter would leave every test here green while the bot answers nothing.
 """
 

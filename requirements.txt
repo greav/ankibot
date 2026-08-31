@@ -26,6 +26,8 @@ certifi==2026.6.17
     #   aiogram
     #   httpcore
     #   httpx
+dishka==1.10.1
+    # via ankibot
 frozenlist==1.8.0
     # via
     #   aiohttp

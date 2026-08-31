@@ -49,7 +49,11 @@ Domain model / Naming) — follow them; this skill is only the procedure.
 
 9. **Wire it through the other layers so it can run:**
 
-   - each new port needs an implementation — `/add-adapter`, wired in `bootstrap/`;
+   - **register the interactor** in `InteractorProvider`
+     (`bootstrap/di/providers/interactor.py`) — one more name in its `provide_all(...)`
+     list, and every handler asking for `FromDishka[TheInteractor]` gets one;
+   - each new port needs an implementation — `/add-adapter`, which also registers it in
+     `AdapterProvider`;
    - an operation becomes reachable once a handler calls it — `/add-handler`.
 
 10. **Add tests** — cover the operation through the handler that calls it, under

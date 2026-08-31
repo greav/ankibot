@@ -1,6 +1,6 @@
 """The in-process store behind every user's deck choice.
 
-It is shared mutable state, so it gets the concurrency test AGENTS.md requires of one.
+It is shared mutable state, so it gets the concurrency test.
 """
 
 import asyncio

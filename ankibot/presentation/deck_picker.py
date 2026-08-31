@@ -13,6 +13,7 @@ from aiogram.types import CallbackQuery, Message
 from ankibot.application.exceptions.anki import AnkiDeckNotFoundError, AnkiSessionExpiredError
 from ankibot.application.exceptions.base import ApplicationError
 from ankibot.application.manage_decks import SelectDeck, SelectDeckRequest
+from ankibot.presentation.identity import TelegramUserId
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +45,7 @@ async def edit_into(callback: CallbackQuery, text: str) -> None:
 
 async def select_tapped_deck(
     callback: CallbackQuery,
+    user_id: TelegramUserId,
     deck_id: int,
     select_deck: SelectDeck,
     confirmation: Callable[[str], str],
@@ -54,7 +56,7 @@ async def select_tapped_deck(
     """
     stored = False
     try:
-        result = await select_deck.execute(SelectDeckRequest(user_id=callback.from_user.id, deck_id=deck_id))
+        result = await select_deck.execute(SelectDeckRequest(user_id=user_id, deck_id=deck_id))
     except AnkiSessionExpiredError:
         await edit_into(callback, AUTH_FIRST)
     except AnkiDeckNotFoundError:

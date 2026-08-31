@@ -18,7 +18,7 @@ this skill is only the procedure.
    takes a single `config` argument:
 
    ```python
-   @dataclass
+   @dataclass(frozen=True, kw_only=True)
    class OpenAIFlashcardGeneratorConfig:
        api_key: str
        model: str
@@ -30,9 +30,41 @@ this skill is only the procedure.
 
 4. **Add config values** to `configs/config.yaml` (`${oc.env:VAR,default}` for secrets),
    and add the config dataclass as a field on the root `Config` in `bootstrap/config.py`.
+   Add the matching key to `.env.example` when the reference has no default.
 
-5. **Wire it in `bootstrap/`:** construct the adapter from its config and inject it
-   where the port is required.
+5. **Expose the config to the graph** — one method on `ConfigProvider`
+   (`bootstrap/di/providers/config.py`), returning the field and annotated with its type:
 
-6. **Add tests**; provide a fake/in-memory adapter so the operations depending on
-   this port can be covered without real infrastructure.
+   ```python
+   @provide
+   def openai_flashcard_generator(self) -> OpenAIFlashcardGeneratorConfig:
+       return self._config.openai_flashcard_generator
+   ```
+
+   `bootstrap/di/container.py` does not change.
+
+6. **Register the adapter** in `AdapterProvider` (`bootstrap/di/providers/adapter.py`).
+   Because the adapter subclasses its port, that is one line:
+
+   ```python
+   flashcard_generator = provide(WithParents[OpenAIFlashcardGenerator])
+   ```
+
+   Write a `@provide` method instead only when the factory has to choose between
+   implementations, or holds a client that must be closed:
+
+   ```python
+   @provide
+   async def flashcard_generator(self, config: OpenAIFlashcardGeneratorConfig) -> AsyncIterator[FlashcardGenerator]:
+       client = build_openai_client(config)
+       yield OpenAIFlashcardGenerator(config, client)
+       await client.close()
+   ```
+
+7. **Add the port to `warm_up`** (`bootstrap/di/warm_up.py`) if it is a new one.
+
+8. **Add tests**; provide a fake/in-memory adapter so the operations depending on
+   this port can be covered without real infrastructure. A new port also needs a
+   constructor argument and a matching `@provide` method on `FakePortProvider`
+   (`tests/common/fakes/ports.py`), plus a fixture and an autouse reset in
+   `tests/integration/bot/conftest.py`.

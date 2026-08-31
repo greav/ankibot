@@ -5,6 +5,7 @@ from aiogram.filters import Command, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message
+from dishka import FromDishka
 
 from ankibot.application.exceptions.anki import (
     AnkiDeckNotFoundError,
@@ -22,6 +23,7 @@ from ankibot.presentation.deck_picker import (
     deck_list_error_reply,
     select_tapped_deck,
 )
+from ankibot.presentation.identity import TelegramUserId
 from ankibot.presentation.keyboards.decks import DeckCallback, deck_keyboard, page_of
 
 logger = logging.getLogger(__name__)
@@ -56,9 +58,12 @@ async def cancel_cmd_handler(message: Message, state: FSMContext) -> None:
 
 
 @router.message(Command("addcard"))
-async def add_card_cmd_handler(message: Message, state: FSMContext, list_decks: ListDecks) -> None:
-    user_id = message.from_user.id if message.from_user is not None else 0
-
+async def add_card_cmd_handler(
+    message: Message,
+    state: FSMContext,
+    list_decks: FromDishka[ListDecks],
+    user_id: FromDishka[TelegramUserId],
+) -> None:
     try:
         result = await list_decks.execute(ListDecksRequest(user_id=user_id))
     except ApplicationError as error:
@@ -81,10 +86,12 @@ async def deck_chosen_handler(
     callback: CallbackQuery,
     callback_data: DeckCallback,
     state: FSMContext,
-    select_deck: SelectDeck,
+    select_deck: FromDishka[SelectDeck],
+    user_id: FromDishka[TelegramUserId],
 ) -> None:
     chosen = await select_tapped_deck(
         callback,
+        user_id,
         callback_data.id,
         select_deck,
         lambda name: f"Deck: {name}. Send the front side.",
@@ -108,7 +115,12 @@ async def front_handler(message: Message, state: FSMContext) -> None:
 
 
 @router.message(AddCard.waiting_for_back)
-async def back_handler(message: Message, state: FSMContext, create_card: CreateCard) -> None:
+async def back_handler(
+    message: Message,
+    state: FSMContext,
+    create_card: FromDishka[CreateCard],
+    user_id: FromDishka[TelegramUserId],
+) -> None:
     back = card_side(message.text)
     if back is None:
         await message.answer("The back side can't be empty. Send the back side.")
@@ -118,11 +130,7 @@ async def back_handler(message: Message, state: FSMContext, create_card: CreateC
     front: str = data["front"]
 
     try:
-        result = await create_card.execute(
-            CreateCardRequest(
-                user_id=message.from_user.id if message.from_user is not None else 0, front=front, back=back
-            )
-        )
+        result = await create_card.execute(CreateCardRequest(user_id=user_id, front=front, back=back))
     except AnkiDeckNotFoundError:
         await state.clear()
         await message.answer(DECK_GONE)

@@ -3,7 +3,7 @@ handlers directly.
 
 Going through ``feed_update`` covers the command filters, router order (``/cancel`` winning inside
 a state, and the state-filtered deck callback winning over ``decks.router``) and aiogram's
-injection by parameter name on top of the handler bodies.
+injection of interactors and the user id on top of the handler bodies.
 """
 
 import asyncio

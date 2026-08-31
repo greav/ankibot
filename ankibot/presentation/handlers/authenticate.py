@@ -3,6 +3,7 @@ import logging
 from aiogram import Router
 from aiogram.filters import Command
 from aiogram.types import Message
+from dishka import FromDishka
 
 from ankibot.application.anki_authentication import AuthenticateAnki
 from ankibot.application.exceptions.anki import (
@@ -17,7 +18,7 @@ router = Router()
 
 
 @router.message(Command("auth"))
-async def authenticate_cmd_handler(message: Message, authenticate_anki: AuthenticateAnki) -> None:
+async def authenticate_cmd_handler(message: Message, authenticate_anki: FromDishka[AuthenticateAnki]) -> None:
     try:
         await authenticate_anki.execute()
     except AnkiInvalidUsernameError:

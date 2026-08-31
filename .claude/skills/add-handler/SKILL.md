@@ -19,18 +19,40 @@ A handler is a thin controller: no business logic.
    router = Router()
 
    @router.message(...)  # e.g. CommandStart(), Command("stats"), F.photo
-   async def handle_<name>(message, ...): ...
+   async def <name>_cmd_handler(message, ...): ...
    ```
 
 3. **Act as a controller:** build the input DTO from the message, call the interactor
    (`interactor.execute(dto)`), map the result to a Telegram response. If the use case
    doesn't exist yet, add it first via `/add-use-case`.
 
-4. **Register the router** in `ankibot/bootstrap/bot.py`:
+4. **Take dependencies by type**, annotated `FromDishka[...]`:
+
+   ```python
+   from dishka import FromDishka
+
+   from ankibot.presentation.identity import TelegramUserId
+
+   @router.message(Command("stats"))
+   async def stats_cmd_handler(
+       message: Message,
+       read_stats: FromDishka[ReadStats],
+       user_id: FromDishka[TelegramUserId],
+   ) -> None: ...
+   ```
+
+   `message`, `state: FSMContext` and `callback_data` stay aiogram's own arguments. The
+   interactor must already be listed in `InteractorProvider` (`/add-use-case` step 9).
+
+5. **Register the router** in `ankibot/bootstrap/bot.py`, inside `create_dispatcher` and
+   **above** the `setup_dishka(...)` / `inject_router(dp)` pair at the end:
 
    ```python
    from ankibot.presentation.handlers import <name>
    dp.include_router(<name>.router)
    ```
 
-5. **Add a test** for the handler flow where applicable.
+   Order matters for routing too: a catch-all message handler goes after every
+   command-specific router.
+
+6. **Add a test** through the dispatcher — see Testing in AGENTS.md.

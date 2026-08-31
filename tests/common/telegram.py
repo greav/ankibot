@@ -132,19 +132,27 @@ def make_bot(session: RecordingSession) -> Bot:
 
 
 def make_message(
-    bot: Bot, text: str = "", *, chat_id: int = TEST_CHAT_ID, user_id: int = TEST_USER_ID, message_id: int = 1
+    bot: Bot,
+    text: str = "",
+    *,
+    chat_id: int = TEST_CHAT_ID,
+    user_id: int | None = TEST_USER_ID,
+    message_id: int = 1,
 ) -> Message:
     """Build a message bound to ``bot`` so replies reach its session.
 
     Doubles as the incoming update a handler receives, and as a queued response for a call a handler
     reads back (see ``RecordingSession.queue_response``) — ``message_id`` lets a test give the latter
     a distinctive id.
+
+    ``user_id=None`` builds the senderless message Telegram delivers for a channel post or an
+    anonymous group admin; aiogram types ``from_user`` as optional for exactly that reason.
     """
     return Message(
         message_id=message_id,
         date=datetime.now(UTC),
         chat=Chat(id=chat_id, type="private"),
-        from_user=User(id=user_id, is_bot=False, first_name="Test"),
+        from_user=User(id=user_id, is_bot=False, first_name="Test") if user_id is not None else None,
         text=text,
     ).as_(bot)
 

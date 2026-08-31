@@ -1,0 +1,20 @@
+[importlinter]
+root_packages =
+    ankibot
+
+[importlinter:contract:1]
+name = Dependencies point inward
+type = layers
+containers =
+    ankibot
+layers =
+    bootstrap
+    presentation
+    infra
+    application
+    domain
+# Every child of `ankibot` must be named above, so a new package cannot be added
+# without deciding where it sits. `__main__` is the entry point, not a layer.
+exhaustive = True
+exhaustive_ignores =
+    __main__

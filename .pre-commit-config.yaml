@@ -42,3 +42,13 @@ repos:
         args: ["--select", "I", "--fix"]
       - id: ruff-format
       - id: ruff-check # lint
+  - repo: local
+    hooks:
+      - id: lint-imports
+        name: import-linter
+        entry: uv run lint-imports
+        language: system
+        # Contracts are about the whole import graph, not the changed files — and the graph can
+        # be changed by editing `.importlinter` alone, which no file type would match.
+        pass_filenames: false
+        always_run: true

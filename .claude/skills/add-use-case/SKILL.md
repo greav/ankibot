@@ -37,7 +37,16 @@ Domain model / Naming) — follow them; this skill is only the procedure.
    ```
 
 6. **Re-export each new interactor from the folder's `__init__.py`** and list it in
-   `__all__`.
+   `__all__`. A new folder also opens that file with its use-case docstring:
+
+   ```python
+   """
+   Use case: Manage Decks.
+
+   Actor: Learner
+   Learner browses the decks of the AnkiWeb account and picks the one new cards go to.
+   """
+   ```
 
 7. **Raise custom errors** from `ankibot/application/exceptions/` — or
    `domain/errors.py` when a domain object itself raises. Model every alternative

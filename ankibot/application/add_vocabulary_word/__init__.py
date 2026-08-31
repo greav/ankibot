@@ -1,3 +1,10 @@
+"""
+Use case: Add Vocabulary Word.
+
+Actor: Learner
+Learner sends a word, reviews the card an LLM filled in for it, and saves it to AnkiWeb.
+"""
+
 from ankibot.application.add_vocabulary_word.generate_card import (
     CardGenerator,
     GenerateCard,

@@ -19,6 +19,7 @@ Telegram bot that turns Telegram messages into Anki flashcards for spaced-repeti
 - `ankibot/presentation/` — user-facing layer (Telegram commands and handlers).
   - `presentation/handlers/` holds message handlers; each handler module owns a `Router`.
   - `presentation/keyboards/` holds router-free keyboard builders and callback-data factories shared by handler modules — a module owning a `Router` cannot be imported by another handler module without attaching it twice.
+  - `presentation/middlewares/` holds dispatcher middlewares, one router-free module per concern, named by what it decides (`access.py`), not by mechanism; each is registered in `bootstrap/bot.py`.
 - `ankibot/bootstrap/` — initialization and dependency injection. Dependencies are composed here and injected into handlers/services.
   - `bot.py` wires routers and startup;
   - `config.py` loads configuration via OmegaConf into the root `Config`;

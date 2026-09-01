@@ -5,6 +5,10 @@ logger:
 bot:
   token: ${oc.env:BOT_TOKEN}
 
+access:
+  # Comma-separated Telegram user ids allowed to use the bot; everyone else is silently ignored.
+  allowed_user_ids: ${oc.env:ALLOWED_USER_IDS}
+
 anki_web:
   username: ${oc.env:ANKI_USERNAME}
   password: ${oc.env:ANKI_PASSWORD}

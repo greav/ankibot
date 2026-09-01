@@ -60,4 +60,4 @@ class AnkiWebCardGateway(CardGateway):
             error=AnkiCardCreationError,
         )
 
-        logger.info("Added card to AnkiWeb", extra={"deck_id": target.deck_id})
+        logger.info("Added card to AnkiWeb deck %s", target.deck_id, extra={"deck_id": target.deck_id})

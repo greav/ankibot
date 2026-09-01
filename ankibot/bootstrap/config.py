@@ -11,6 +11,7 @@ from ankibot.infra.llm.openai_client import OpenAIClientConfig
 from ankibot.infra.llm.snippet_cards.openai_snippet_cards_generator import OpenAISnippetCardsGeneratorConfig
 from ankibot.infra.llm.vocabulary_card.openai_card_generator import OpenAICardGeneratorConfig
 from ankibot.infra.logger import LoggerConfig
+from ankibot.presentation.middlewares.access import AccessConfig
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -27,6 +28,7 @@ class CardGeneratorConfig:
 @dataclass(frozen=True, kw_only=True)
 class Config:
     bot: BotConfig
+    access: AccessConfig
     logger: LoggerConfig
     anki_web: AnkiWebAuthenticatorConfig
     anki_svc: AnkiSvcClientConfig

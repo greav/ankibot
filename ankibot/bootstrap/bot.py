@@ -9,6 +9,7 @@ from ankibot.bootstrap.di import make_container, warm_up
 from ankibot.infra.logger import configure_root_logger
 from ankibot.presentation.commands import set_commands
 from ankibot.presentation.handlers import add_card, authenticate, decks, errors, snippet_cards, start, vocabulary_card
+from ankibot.presentation.middlewares.access import AccessConfig, AllowlistMiddleware
 
 from .config import load_config
 
@@ -17,9 +18,13 @@ logger = logging.getLogger(__name__)
 _CONFIG_PATH_ENV = "CONFIG_PATH"
 
 
-def create_dispatcher(container: AsyncContainer) -> Dispatcher:
+def create_dispatcher(container: AsyncContainer, access: AccessConfig) -> Dispatcher:
     """Compose the dispatcher: routers in resolution order, over the container behind ``FromDishka``."""
     dp = Dispatcher()
+
+    # Outer middleware on the update observer, registered before setup_dishka: a stranger's update
+    # is dropped before filters run and before dishka opens a REQUEST container for it.
+    dp.update.outer_middleware(AllowlistMiddleware(access))
 
     dp.include_router(start.router)
     dp.include_router(authenticate.router)
@@ -64,7 +69,7 @@ async def main() -> None:
         await container.close()
         raise
 
-    dp = create_dispatcher(container)
+    dp = create_dispatcher(container, config.access)
     # Closing the container finalizes every factory that yielded, so the HTTP and SDK clients go
     # down with it; no adapter needs its own shutdown hook.
     dp.shutdown.register(container.close)

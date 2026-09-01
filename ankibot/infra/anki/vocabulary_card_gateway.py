@@ -88,4 +88,4 @@ class AnkiWebVocabularyCardGateway(VocabularyCardGateway):
             error=AnkiCardCreationError,
         )
 
-        logger.info("Added vocabulary card to AnkiWeb", extra={"deck_id": target.deck_id})
+        logger.info("Added vocabulary card to AnkiWeb deck %s", target.deck_id, extra={"deck_id": target.deck_id})

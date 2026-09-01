@@ -8,6 +8,7 @@ from dishka import AsyncContainer
 from ankibot.application.add_snippet_cards import DraftCard
 from ankibot.application.manage_decks import Deck
 from ankibot.bootstrap.bot import create_dispatcher
+from ankibot.presentation.middlewares.access import AccessConfig
 from tests.common.fakes.anki_authenticator import FakeAnkiAuthenticator
 from tests.common.fakes.card_gateway import FakeCardGateway
 from tests.common.fakes.card_generator import FakeCardGenerator
@@ -16,6 +17,10 @@ from tests.common.fakes.ports import make_fake_container
 from tests.common.fakes.selected_deck_store import FakeSelectedDeckStore
 from tests.common.fakes.snippet_cards_generator import FakeSnippetCardsGenerator
 from tests.common.fakes.vocabulary_card_gateway import DEFAULT_TEMPLATE, FakeVocabularyCardGateway
+
+# Any sender id a test picks must stay at or below this cap to pass the allowlist gate the
+# dispatcher fixture builds; ids above it belong to test_access's strangers.
+MAX_ALLOWED_TEST_USER_ID = 99
 
 DEFAULT_DECKS = {1: "Default", 2: "Spanish"}
 DEFAULT_DECK_ID = 1
@@ -110,8 +115,14 @@ def dispatcher(container: AsyncContainer) -> Dispatcher:
 
     Built once per session because a handler module's ``Router`` is a module-level singleton:
     including it a second time raises ``RuntimeError: Router is already attached``.
+
+    The allowlist admits every id up to ``MAX_ALLOWED_TEST_USER_ID``: the builders default to
+    ``TEST_USER_ID`` and tests hand-pick other small ids for multi-user scenarios, so any of those
+    doubles as the allowed-user path through the gate. ``test_access`` plays the stranger with an
+    id above the cap.
     """
-    return create_dispatcher(container)
+    access = AccessConfig(allowed_user_ids=",".join(str(i) for i in range(1, MAX_ALLOWED_TEST_USER_ID + 1)))
+    return create_dispatcher(container, access)
 
 
 @pytest.fixture(autouse=True)

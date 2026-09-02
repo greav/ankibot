@@ -46,15 +46,25 @@ All commands run on the server as root (or with `sudo`) unless stated otherwise.
    scp deploy/deploy.sh deploy/systemd/ankibot-deploy.{service,timer} .env.example <you>@<host>:/tmp/
    ```
 
-   On the server, copy as `deploy` so the files are his from the start — the timer reads
-   them as `deploy`. `deploy.sh` arrives executable (git tracks the bit); `.env` is the one
-   file that needs a non-default mode:
+   On the server, create the directory as root, then do the rest in one session **as
+   `deploy`** — the files are then his from the start, which is what the timer needs:
 
    ```sh
    install -d -o deploy -g deploy /opt/ankibot
-   sudo -u deploy cp /tmp/deploy.sh /opt/ankibot/
-   sudo -u deploy install -m 600 /tmp/.env.example /opt/ankibot/.env
-   sudoedit -u deploy /opt/ankibot/.env        # fill in the real values, delete CONFIG_PATH
+   sudo -iu deploy
+   ```
+
+   ```sh
+   cp /tmp/deploy.sh /opt/ankibot/                      # arrives executable; git tracks the bit
+   install -m 600 /tmp/.env.example /opt/ankibot/.env
+   vim /opt/ankibot/.env                                 # fill in the real values, delete CONFIG_PATH
+
+   # while the repository is private — see the notes below for both tokens:
+   touch /opt/ankibot/github.token && chmod 600 /opt/ankibot/github.token
+   vim /opt/ankibot/github.token                         # one line: the fine-grained token
+   docker login ghcr.io -u greav                         # paste the classic token at the password prompt
+
+   exit
    ```
 
    - `deploy.sh` is what the timer runs; it changes rarely — re-copy it by hand when it does.
@@ -62,40 +72,30 @@ All commands run on the server as root (or with `sudo`) unless stated otherwise.
    - In `.env`, delete the `CONFIG_PATH` line: it is for local runs, and `env_file` values
      override the path the image sets for itself.
 
-   - **While the repository is private**, also create `/opt/ankibot/github.token` holding a
-     fine-grained personal access token: GitHub → Settings → Developer settings →
-     Fine-grained tokens → repository access limited to `ankibot`, permission *Contents:
-     read-only*, nothing else. Paste it through an editor rather than `echo`, so it never
-     lands in shell history:
+   - `github.token` lets `deploy.sh` fetch `compose.yaml` from a private repository: a
+     **fine-grained** personal access token (GitHub → Settings → Developer settings →
+     Fine-grained tokens), repository access limited to `ankibot`, permission *Contents:
+     read-only*, nothing else.
 
-     ```sh
-     sudo -u deploy install -m 600 /dev/null /opt/ankibot/github.token
-     sudoedit -u deploy /opt/ankibot/github.token   # one line: the token
-     ```
+   - `docker login` lets `deploy` pull the private ghcr package. ghcr accepts only a
+     **classic** token (`ghp_…`): GitHub → Settings → Developer settings → Personal access
+     tokens → **Tokens (classic)**, single scope `read:packages`. The fine-grained kind
+     (`github_pat_…`, the UI's default) is not accepted by ghcr — that is what
+     `denied: denied` at login means. Docker stores the token in `~deploy/.docker/config.json`.
 
-     `deploy.sh` sends it when the file exists; a leaked token can only read the
-     repository. Once the repository goes public, delete the file and revoke the token —
-     the script then fetches anonymously, no change needed.
+   - Name both tokens after where they live and what they do (`ankibot-vps repo read`,
+     `ankibot-vps ghcr pull`) and give them an expiry: they are temporary by design. Once
+     the repository goes public, make the package public too (GitHub → Packages → `ankibot`
+     → Package settings → Change visibility), then delete `github.token`,
+     `sudo -iu deploy docker logout ghcr.io`, and revoke both — `deploy.sh` fetches
+     anonymously from then on, no change needed. The image carries no secrets —
+     `config.yaml` reads every sensitive value from `.env`.
 
    `compose.yaml` needs no copying — `deploy.sh` fetches it from `master` on every run.
 
-1. **Let the server pull the image.** The image must exist first: push to `master` (or run
-   the workflow from the Actions tab) and wait for it to go green — that creates the
-   `ankibot` package in ghcr. While the repository is private, so is the package: log in as
-   `deploy` with a personal access token (classic) whose only scope is `read:packages` —
-   fine-grained tokens do not cover ghcr, and the classic one is limited to pulling images:
-
-   ```sh
-   sudo -iu deploy docker login ghcr.io -u greav
-   # paste the token as the password; Docker stores it for future pulls
-   ```
-
-   Once the repository goes public, make the package public too (GitHub → Packages →
-   `ankibot` → Package settings → Change visibility): pulls then need no login, so revoke
-   the token and `sudo -iu deploy docker logout ghcr.io`. The image carries no secrets —
-   `config.yaml` reads every sensitive value from `.env`.
-
-1. **Install the timer** (the unit files arrived in `/tmp` with step 3):
+1. **Install the timer.** The image must exist first: push to `master` (or run the workflow
+   from the Actions tab) and wait for it to go green — that creates the `ankibot` package in
+   ghcr. Then, as root (the unit files arrived in `/tmp` with step 3):
 
    ```sh
    cp /tmp/ankibot-deploy.{service,timer} /etc/systemd/system/

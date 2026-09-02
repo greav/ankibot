@@ -1,0 +1,13 @@
+# Installed to /etc/systemd/system/ankibot-deploy.timer (see docs/deploy.md).
+# A tick is one cheap request to GitHub and one to ghcr; nothing happens unless
+# the compose file or the image digest changed.
+[Unit]
+Description=Poll for a new ankibot release
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=2min
+RandomizedDelaySec=20s
+
+[Install]
+WantedBy=timers.target

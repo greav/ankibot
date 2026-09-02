@@ -32,6 +32,10 @@ RUN pip install --no-cache-dir --no-deps -r requirements.txt
 
 COPY ankibot ankibot
 
+# The config carries no secrets (everything sensitive arrives via ${oc.env:...}), so it
+# ships inside the image: one tag is code and config that were tested together.
+COPY configs configs
+
 # Sibling to ankibot/, not nested under it — see the PROTO_STAMP comment in the Makefile for why.
 COPY --from=proto /build/out/ankiweb ankiweb
 

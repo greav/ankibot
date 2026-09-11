@@ -22,6 +22,7 @@ from ankibot.application.exceptions.generation import CardGenerationUnavailableE
 from ankibot.domain.card_template import CardTemplate
 from ankibot.presentation.keyboards.decks import DeckCallback
 from ankibot.presentation.keyboards.generated_card import GeneratedCardCallback
+from ankibot.presentation.message_kinds import MAX_WORD_LENGTH
 from tests.common.fakes.card_generator import FakeCardGenerator
 from tests.common.fakes.vocabulary_card_gateway import FakeVocabularyCardGateway
 from tests.common.telegram import RecordingSession, make_bot, make_callback_query, make_message
@@ -302,6 +303,52 @@ async def test_plain_text_is_not_intercepted_while_addcard_is_mid_dialog(dispatc
 
     # Assert
     assert session.answers[-1] == "Send the back side."
+
+
+async def test_user_can_send_a_long_word_through_the_command(dispatcher: Dispatcher) -> None:
+    """/word opens a waiting state where even snippet-length text is treated as a word to look up."""
+    # Arrange
+    session = RecordingSession()
+    long_word = "a" * (MAX_WORD_LENGTH + 1)
+
+    # Act
+    await send(dispatcher, session, "/word", chat_id=16, user_id=16)
+    await send_word(dispatcher, session, long_word, chat_id=16, user_id=16)
+
+    # Assert
+    assert session.answers[0] == "Send a word to make a card from."
+    assert session.last_answer == (
+        "Add to English Words V2?\n\nWord: serendipity\nMeaning: a pleasant surprise\nExample: What a serendipity!"
+    )
+
+
+async def test_user_cannot_feed_the_word_waiting_state_an_unusable_message(dispatcher: Dispatcher) -> None:
+    """Whitespace after /word is re-asked, not silently dropped."""
+    # Arrange
+    session = RecordingSession()
+
+    # Act
+    await send(dispatcher, session, "/word", chat_id=17, user_id=17)
+    await send(dispatcher, session, "   ", chat_id=17, user_id=17)
+
+    # Assert
+    assert session.last_answer == "That doesn't look like a word. Send a word to make a card from."
+
+
+async def test_user_can_switch_from_awaiting_a_snippet_to_a_word(dispatcher: Dispatcher) -> None:
+    """/word typed while the bot waits for a snippet switches flows instead of being re-asked as a snippet."""
+    # Arrange
+    session = RecordingSession()
+
+    # Act
+    await send(dispatcher, session, "/snippet", chat_id=18, user_id=18)
+    await send(dispatcher, session, "/word", chat_id=18, user_id=18)
+    await send_word(dispatcher, session, "serendipity", chat_id=18, user_id=18)
+
+    # Assert
+    assert session.last_answer == (
+        "Add to English Words V2?\n\nWord: serendipity\nMeaning: a pleasant surprise\nExample: What a serendipity!"
+    )
 
 
 async def test_two_users_can_generate_previews_concurrently_without_state_mixing(dispatcher: Dispatcher) -> None:

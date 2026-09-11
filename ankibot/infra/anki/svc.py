@@ -1,3 +1,4 @@
+import logging
 from dataclasses import dataclass
 
 import httpx
@@ -11,6 +12,9 @@ from ankibot.infra.anki.protobuf import PROTOBUF_CONTENT_TYPE, parse_or_raise
 @dataclass(frozen=True, kw_only=True)
 class AnkiSvcClientConfig:
     ankiuser_base_url: str
+
+
+logger = logging.getLogger(__name__)
 
 
 class AnkiSvcClient:
@@ -35,6 +39,23 @@ class AnkiSvcClient:
         error: type[ApplicationError],
     ) -> M:
         """Send ``request`` to ``path`` and parse the reply into ``response``."""
+        try:
+            return await self._post(path, request, response, error=error)
+        except AnkiSessionExpiredError:
+            logger.info("AnkiWeb session expired at %s", path)
+            raise
+        except ApplicationError as failure:
+            logger.warning("AnkiWeb call failed: %s", failure)
+            raise
+
+    async def _post[M: Message](
+        self,
+        path: str,
+        request: Message,
+        response: M,
+        *,
+        error: type[ApplicationError],
+    ) -> M:
         try:
             http_response = await self._client.post(
                 f"{self._config.ankiuser_base_url}{path}",

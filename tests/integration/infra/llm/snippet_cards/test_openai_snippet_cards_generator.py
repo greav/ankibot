@@ -6,7 +6,8 @@ import httpx2
 import pytest
 from openai import AsyncOpenAI
 
-from ankibot.application.add_snippet_cards import DraftCard, Snippet, SnippetImage
+from ankibot.application.add_snippet_cards import DraftCard, Snippet
+from ankibot.application.common.dto.image import Image
 from ankibot.application.exceptions.generation import CardGenerationError, CardGenerationUnavailableError
 from ankibot.infra.llm.snippet_cards.openai_snippet_cards_generator import (
     OpenAISnippetCardsGenerator,
@@ -121,7 +122,7 @@ async def test_generator_can_send_a_screenshot_as_an_image_part() -> None:
         return httpx2.Response(200, json=chat_completion_body(content=cards_content(("Q", "A"))))
 
     generator, client = make_generator(handler)
-    snippet = Snippet(image=SnippetImage(data=b"fake-jpeg", mime_type="image/jpeg"), hint="the definition")
+    snippet = Snippet(image=Image(data=b"fake-jpeg", mime_type="image/jpeg"), hint="the definition")
 
     # Act
     async with client:
@@ -184,16 +185,19 @@ async def test_generator_cannot_read_an_answer_of_the_wrong_shape() -> None:
             await generator.generate(TEXT_SNIPPET)
 
 
-async def test_generator_cannot_read_a_refusal() -> None:
+async def test_generator_cannot_read_a_refusal(caplog: pytest.LogCaptureFixture) -> None:
     """A model refusal is a distinct branch, not a confusing JSON parse failure on None content."""
     # Arrange
     handler = build_handler(body=chat_completion_body(content=None, refusal="cannot help with that"))
     generator, client = make_generator(handler)
 
-    # Act / Assert
+    # Act
     async with client:
-        with pytest.raises(CardGenerationError, match="cannot help with that"):
+        with caplog.at_level(logging.WARNING), pytest.raises(CardGenerationError, match="cannot help with that"):
             await generator.generate(TEXT_SNIPPET)
+
+    # Assert
+    assert "cannot help with that" in caplog.text
 
 
 async def test_generator_cannot_read_a_truncated_answer() -> None:

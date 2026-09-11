@@ -32,11 +32,13 @@ class AnkiWebCardGateway(CardGateway):
             target_deck_id = info.current_deck_id
             deck_name = next((deck.name for deck in info.decks if deck.id == target_deck_id), None)
             if deck_name is None:
+                logger.warning("AnkiWeb's current deck %s matches no known deck", target_deck_id)
                 raise AnkiCardCreationError(f"AnkiWeb's current_deck_id {target_deck_id} matches no known deck")
         else:
             target_deck_id = deck_id
             deck_name = next((deck.name for deck in info.decks if deck.id == deck_id), None)
             if deck_name is None:
+                logger.warning("The selected deck %s no longer exists in AnkiWeb", deck_id)
                 raise AnkiDeckNotFoundError
 
         return AddTarget(
@@ -60,4 +62,4 @@ class AnkiWebCardGateway(CardGateway):
             error=AnkiCardCreationError,
         )
 
-        logger.info("Added card to AnkiWeb deck %s", target.deck_id, extra={"deck_id": target.deck_id})
+        logger.info("Added card to AnkiWeb deck %s", target.deck_id)

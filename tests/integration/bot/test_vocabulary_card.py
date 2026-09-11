@@ -11,7 +11,7 @@ from typing import Literal
 import pytest
 from aiogram import Dispatcher
 from aiogram.methods import EditMessageReplyMarkup, SendMessage
-from aiogram.types import Update
+from aiogram.types import InlineKeyboardMarkup, Update
 
 from ankibot.application.exceptions.anki import (
     AnkiCardCreationError,
@@ -20,15 +20,28 @@ from ankibot.application.exceptions.anki import (
 )
 from ankibot.application.exceptions.generation import CardGenerationUnavailableError
 from ankibot.domain.card_template import CardTemplate
-from ankibot.presentation.handlers.vocabulary_card import ASK_FEEDBACK, NOT_FEEDBACK
+from ankibot.presentation.handlers.vocabulary_card import ASK_FEEDBACK, NO_WORDS_FOUND, NOT_FEEDBACK, WHICH_WORD
 from ankibot.presentation.keyboards.decks import DeckCallback
 from ankibot.presentation.keyboards.generated_card import GeneratedCardCallback
+from ankibot.presentation.keyboards.word_candidates import WordCandidateCallback
 from ankibot.presentation.message_kinds import MAX_WORD_LENGTH
 from tests.common.fakes.card_generator import FakeCardGenerator
 from tests.common.fakes.vocabulary_card_gateway import FakeVocabularyCardGateway
-from tests.common.telegram import RecordingSession, make_bot, make_callback_query, make_message
+from tests.common.fakes.word_suggester import FakeWordSuggester
+from tests.common.telegram import (
+    RecordingSession,
+    make_bot,
+    make_callback_query,
+    make_message,
+    make_photo_message,
+    queue_file_download,
+)
 
 DEFAULT_DECK_ID = 1
+
+EXPECTED_PREVIEW = (
+    "Add to English Words V2?\n\nWord: serendipity\nMeaning: a pleasant surprise\nExample: What a serendipity!"
+)
 
 
 async def send(dispatcher: Dispatcher, session: RecordingSession, text: str, *, chat_id: int, user_id: int) -> None:
@@ -57,6 +70,44 @@ async def send_word(
     )
     update = Update(update_id=1, message=make_message(bot, text=word, chat_id=chat_id, user_id=user_id))
     await dispatcher.feed_update(bot, update)
+
+
+async def send_photo(
+    dispatcher: Dispatcher,
+    session: RecordingSession,
+    *,
+    caption: str | None = None,
+    chat_id: int,
+    user_id: int,
+    preview_message_id: int = 100,
+) -> None:
+    """Send a screenshot, queuing its download pair and the sendMessage response a preview reads back."""
+    bot = make_bot(session)
+    queue_file_download(session, b"fake-jpeg-bytes")
+    session.queue_response(
+        SendMessage, make_message(bot, message_id=preview_message_id, chat_id=chat_id, user_id=user_id)
+    )
+    photo = make_photo_message(bot, caption=caption, chat_id=chat_id, user_id=user_id)
+    await dispatcher.feed_update(bot, Update(update_id=1, message=photo))
+
+
+async def pick_word(
+    dispatcher: Dispatcher,
+    session: RecordingSession,
+    index: int,
+    *,
+    chat_id: int,
+    user_id: int,
+    preview_message_id: int = 100,
+) -> None:
+    """Tap a candidate on the word picker, queuing the re-download and the preview's sendMessage response."""
+    bot = make_bot(session)
+    queue_file_download(session, b"fake-jpeg-bytes")
+    session.queue_response(
+        SendMessage, make_message(bot, message_id=preview_message_id, chat_id=chat_id, user_id=user_id)
+    )
+    callback = make_callback_query(bot, WordCandidateCallback(index=index).pack(), chat_id=chat_id, user_id=user_id)
+    await dispatcher.feed_update(bot, Update(update_id=4, callback_query=callback))
 
 
 async def pick_deck(
@@ -166,18 +217,20 @@ async def test_user_cannot_generate_a_card_when_the_generator_is_unavailable(
 
 
 async def test_user_cannot_generate_a_card_when_fields_are_left_incomplete(
-    dispatcher: Dispatcher, card_generator: FakeCardGenerator
+    dispatcher: Dispatcher, card_generator: FakeCardGenerator, caplog: pytest.LogCaptureFixture
 ) -> None:
-    """A generator that leaves fields empty produces a retry-or-rephrase reply, not a stack trace."""
+    """A generator that leaves fields empty produces a retry-or-rephrase reply, and the log names the fields."""
     # Arrange
     session = RecordingSession()
     card_generator.values = {"Word": "serendipity"}
 
     # Act
-    await send(dispatcher, session, "serendipity", chat_id=6, user_id=6)
+    with caplog.at_level(logging.WARNING):
+        await send(dispatcher, session, "serendipity", chat_id=6, user_id=6)
 
     # Assert
     assert session.last_answer == "Couldn't generate a card for that word. Try again, or rephrase it."
+    assert "Meaning, Example" in caplog.text
 
 
 async def test_user_cannot_generate_a_card_without_authenticating(
@@ -317,7 +370,7 @@ async def test_user_can_send_a_long_word_through_the_command(dispatcher: Dispatc
     await send_word(dispatcher, session, long_word, chat_id=16, user_id=16)
 
     # Assert
-    assert session.answers[0] == "Send a word to make a card from."
+    assert session.answers[0] == "Send a word to make a card from, or a screenshot of the text it appears in."
     assert session.last_answer == (
         "Add to English Words V2?\n\nWord: serendipity\nMeaning: a pleasant surprise\nExample: What a serendipity!"
     )
@@ -423,3 +476,89 @@ async def test_user_cannot_send_a_blank_note_as_word_feedback(dispatcher: Dispat
 
     # Assert
     assert session.last_answer == NOT_FEEDBACK
+
+
+async def test_user_can_make_a_word_card_from_a_captioned_screenshot(dispatcher: Dispatcher) -> None:
+    """After /word, a screenshot captioned with the word goes straight to its card, no picker."""
+    # Arrange
+    session = RecordingSession()
+    await send(dispatcher, session, "/word", chat_id=64, user_id=64)
+
+    # Act
+    await send_photo(dispatcher, session, caption="serendipity", chat_id=64, user_id=64)
+
+    # Assert
+    assert WHICH_WORD not in session.answers
+    assert session.last_answer == EXPECTED_PREVIEW
+
+
+async def test_user_can_pick_a_word_from_a_screenshot(dispatcher: Dispatcher) -> None:
+    """An uncaptioned screenshot offers the words worth looking up; tapping one makes its card."""
+    # Arrange
+    session = RecordingSession()
+    await send(dispatcher, session, "/word", chat_id=65, user_id=65)
+
+    # Act
+    await send_photo(dispatcher, session, chat_id=65, user_id=65)
+    asked = session.last_answer
+    picker = next(
+        request for request in session.requests if isinstance(request, SendMessage) and request.text == WHICH_WORD
+    )
+    await pick_word(dispatcher, session, 1, chat_id=65, user_id=65)
+
+    # Assert
+    assert asked == WHICH_WORD
+    markup = picker.reply_markup
+    assert isinstance(markup, InlineKeyboardMarkup)
+    assert [[button.text for button in row] for row in markup.inline_keyboard] == [["serendipity", "ubiquitous"]]
+    assert session.last_answer == EXPECTED_PREVIEW
+
+
+async def test_user_cannot_pick_a_word_when_the_screenshot_has_none(
+    dispatcher: Dispatcher, word_suggester: FakeWordSuggester
+) -> None:
+    """A screenshot with nothing worth a card is answered explicitly, and /word keeps waiting for input."""
+    # Arrange
+    session = RecordingSession()
+    word_suggester.words = []
+    await send(dispatcher, session, "/word", chat_id=66, user_id=66)
+
+    # Act
+    await send_photo(dispatcher, session, chat_id=66, user_id=66)
+    refused = session.last_answer
+    await send_word(dispatcher, session, "serendipity", chat_id=66, user_id=66)
+
+    # Assert
+    assert refused == NO_WORDS_FOUND
+    assert session.last_answer == EXPECTED_PREVIEW
+
+
+async def test_user_can_regenerate_a_screenshot_word_card(dispatcher: Dispatcher) -> None:
+    """Regenerate on a screenshot card re-downloads the screenshot by file_id instead of losing the context."""
+    # Arrange
+    session = RecordingSession()
+    await send(dispatcher, session, "/word", chat_id=67, user_id=67)
+    await send_photo(dispatcher, session, chat_id=67, user_id=67)
+    await pick_word(dispatcher, session, 0, chat_id=67, user_id=67)
+
+    # Act
+    queue_file_download(session, b"fake-jpeg-bytes")
+    await tap_action(dispatcher, session, "regenerate", chat_id=67, user_id=67, preview_message_id=501)
+
+    # Assert
+    assert session.answers.count(EXPECTED_PREVIEW) == 2
+
+
+async def test_user_can_type_a_word_the_picker_missed(dispatcher: Dispatcher) -> None:
+    """A word typed over the picker makes its card, with the screenshot re-fetched as its context."""
+    # Arrange
+    session = RecordingSession()
+    await send(dispatcher, session, "/word", chat_id=68, user_id=68)
+    await send_photo(dispatcher, session, chat_id=68, user_id=68)
+
+    # Act
+    queue_file_download(session, b"fake-jpeg-bytes")
+    await send_word(dispatcher, session, "gist", chat_id=68, user_id=68)
+
+    # Assert
+    assert session.last_answer == EXPECTED_PREVIEW

@@ -3,8 +3,9 @@ import logging
 import pytest
 
 from ankibot.application.add_vocabulary_word import CardFeedback
+from ankibot.application.common.dto.image import Image
 from ankibot.domain.card_template import CardTemplate
-from ankibot.infra.llm.vocabulary_card.prompt import build_user_prompt, response_schema
+from ankibot.infra.llm.vocabulary_card.prompt import build_user_content, build_user_prompt, response_schema
 
 
 def test_response_schema_can_declare_every_field_as_required_and_a_string() -> None:
@@ -116,3 +117,33 @@ def test_build_user_prompt_can_carry_the_previous_card_and_the_note_on_it() -> N
         "The learner was shown this card:\nWord: serendipity\nMeaning: a fortunate chance\n"
         "The learner asked to change this about it: simpler meaning"
     )
+
+
+def test_user_content_can_be_the_prompt_alone_without_a_screenshot() -> None:
+    """A typed word sends the plain prompt, with no mention of a screenshot."""
+    # Arrange
+    template = CardTemplate(name="English Words V2", fields=("Word", "Meaning"))
+
+    # Act
+    result = build_user_content("serendipity", template)
+
+    # Assert
+    assert result == build_user_prompt("serendipity", template)
+    assert "screenshot" not in result
+
+
+def test_user_content_can_carry_the_screenshot_after_the_prompt() -> None:
+    """With a screenshot the prompt asks to read the usage off it, and the image follows as a data URL."""
+    # Arrange
+    template = CardTemplate(name="English Words V2", fields=("Word", "Meaning"))
+    image = Image(data=b"\x89PNG-not-really", mime_type="image/png")
+
+    # Act
+    result = build_user_content("serendipity", template, image)
+
+    # Assert
+    assert isinstance(result, list)
+    assert result[0]["type"] == "text"
+    assert "screenshot" in result[0]["text"]
+    assert result[1]["type"] == "image_url"
+    assert result[1]["image_url"]["url"].startswith("data:image/png;base64,")

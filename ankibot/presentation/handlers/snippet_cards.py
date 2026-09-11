@@ -28,7 +28,6 @@ from ankibot.application.add_snippet_cards import (
     SaveCards,
     SaveSnippetCardsRequest,
     Snippet,
-    SnippetImage,
 )
 from ankibot.application.exceptions.anki import (
     AnkiDeckNotFoundError,
@@ -44,6 +43,7 @@ from ankibot.application.exceptions.generation import (
 )
 from ankibot.presentation.deck_picker import AUTH_FIRST, DECK_GONE, edit_into
 from ankibot.presentation.identity import TelegramUserId
+from ankibot.presentation.images import PHOTO_JPEG_MIME, download_image
 from ankibot.presentation.keyboards.snippet_cards import SnippetCardCallback, snippet_cards_keyboard, toggled
 from ankibot.presentation.message_kinds import plain_text, snippet_text
 
@@ -52,9 +52,6 @@ logger = logging.getLogger(__name__)
 router = Router()
 
 TELEGRAM_MESSAGE_LIMIT = 4096
-
-# Telegram recompresses every photo-style upload to JPEG; only a document keeps its own type.
-PHOTO_JPEG_MIME = "image/jpeg"
 
 SEND_A_SNIPPET = "Send a text snippet or a screenshot to make cards from."
 NOT_A_SNIPPET = "That doesn't look like a snippet. Send a text snippet or a screenshot."
@@ -125,14 +122,6 @@ async def _clear_previous_keyboard(message: Message, state: FSMContext) -> None:
         await bot.edit_message_reply_markup(chat_id=message.chat.id, message_id=preview_message_id, reply_markup=None)
 
 
-async def _download_image(bot: Bot, file_id: str, mime_type: str) -> SnippetImage | None:
-    """Fetch the sent image's bytes, or None when Telegram hands nothing back."""
-    buffer = await bot.download(file_id)
-    if buffer is None:
-        return None
-    return SnippetImage(data=buffer.read(), mime_type=mime_type)
-
-
 def _source_of(data: dict[str, object]) -> dict[str, str | None]:
     """The snippet's source as ``_send_preview`` stored it, for a regeneration to carry forward."""
     return {
@@ -154,7 +143,7 @@ async def _restore_snippet(bot: Bot | None, source: dict[str, str | None]) -> Sn
     mime_type = source["mime_type"]
     if file_id is None or mime_type is None or bot is None:
         return None
-    image = await _download_image(bot, file_id, mime_type)
+    image = await download_image(bot, file_id, mime_type)
     if image is None:
         return None
     return Snippet(image=image, hint=hint)
@@ -244,7 +233,7 @@ async def _handle_image(
     if bot is None:
         return
     await _clear_previous_keyboard(message, state)
-    image = await _download_image(bot, file_id, mime_type)
+    image = await download_image(bot, file_id, mime_type)
     if image is None:
         await state.clear()
         await message.answer(IMAGE_UNREADABLE)

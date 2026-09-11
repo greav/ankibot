@@ -14,7 +14,7 @@ from typing import Any
 from dishka import AsyncContainer
 
 from ankibot.application.add_snippet_cards import SnippetCardsGenerator
-from ankibot.application.add_vocabulary_word import CardGenerator, VocabularyCardGateway
+from ankibot.application.add_vocabulary_word import CardGenerator, VocabularyCardGateway, WordSuggester
 from ankibot.application.anki_authentication.authenticate_anki import AnkiAuthenticator
 from ankibot.application.common.card_gateway import CardGateway
 from ankibot.application.common.selected_deck_store import SelectedDeckStore
@@ -31,6 +31,7 @@ _PORTS: tuple[Any, ...] = (
     SelectedDeckStore,
     VocabularyCardGateway,
     CardGenerator,
+    WordSuggester,
     SnippetCardsGenerator,
 )
 

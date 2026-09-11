@@ -13,7 +13,7 @@ from dishka import STRICT_VALIDATION, AsyncContainer, Provider, Scope, make_asyn
 from dishka.integrations.aiogram import AiogramProvider
 
 from ankibot.application.add_snippet_cards import SnippetCardsGenerator
-from ankibot.application.add_vocabulary_word import CardGenerator, VocabularyCardGateway
+from ankibot.application.add_vocabulary_word import CardGenerator, VocabularyCardGateway, WordSuggester
 from ankibot.application.anki_authentication.authenticate_anki import AnkiAuthenticator
 from ankibot.application.common.card_gateway import CardGateway
 from ankibot.application.common.selected_deck_store import SelectedDeckStore
@@ -35,6 +35,7 @@ class FakePortProvider(Provider):
         selected_decks: SelectedDeckStore,
         vocabulary_card_gateway: VocabularyCardGateway,
         card_generator: CardGenerator,
+        word_suggester: WordSuggester,
         snippet_cards_generator: SnippetCardsGenerator,
     ) -> None:
         super().__init__()
@@ -44,6 +45,7 @@ class FakePortProvider(Provider):
         self._selected_decks = selected_decks
         self._vocabulary_card_gateway = vocabulary_card_gateway
         self._card_generator = card_generator
+        self._word_suggester = word_suggester
         self._snippet_cards_generator = snippet_cards_generator
 
     @provide
@@ -71,6 +73,10 @@ class FakePortProvider(Provider):
         return self._card_generator
 
     @provide
+    def word_suggester(self) -> WordSuggester:
+        return self._word_suggester
+
+    @provide
     def snippet_cards_generator(self) -> SnippetCardsGenerator:
         return self._snippet_cards_generator
 
@@ -83,6 +89,7 @@ def make_fake_container(
     selected_decks: SelectedDeckStore,
     vocabulary_card_gateway: VocabularyCardGateway,
     card_generator: CardGenerator,
+    word_suggester: WordSuggester,
     snippet_cards_generator: SnippetCardsGenerator,
 ) -> AsyncContainer:
     """Build the test container over the given fakes, under the same validation production uses."""
@@ -94,6 +101,7 @@ def make_fake_container(
             selected_decks=selected_decks,
             vocabulary_card_gateway=vocabulary_card_gateway,
             card_generator=card_generator,
+            word_suggester=word_suggester,
             snippet_cards_generator=snippet_cards_generator,
         ),
         InteractorProvider(),

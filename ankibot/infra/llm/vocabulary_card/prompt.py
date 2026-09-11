@@ -1,8 +1,12 @@
 import logging
 from typing import Any
 
+from openai.types.chat import ChatCompletionContentPartParam
+
 from ankibot.application.add_vocabulary_word import CardFeedback
+from ankibot.application.common.dto.image import Image
 from ankibot.domain.card_template import CardTemplate
+from ankibot.infra.llm.images import image_data_url
 
 logger = logging.getLogger(__name__)
 
@@ -13,21 +17,43 @@ SYSTEM_PROMPT = (
 )
 
 
-def build_user_prompt(word: str, template: CardTemplate, feedback: CardFeedback | None = None) -> str:
+CONTEXT_NOTE = (
+    "The word appears in the attached screenshot; ground the fields that quote its usage in the "
+    "sentence it appears in there."
+)
+
+
+def build_user_prompt(
+    word: str, template: CardTemplate, feedback: CardFeedback | None = None, *, with_context: bool = False
+) -> str:
     """The user-turn prompt asking the model to fill ``template``'s fields for ``word``.
 
     With ``feedback``, the card the learner was shown and their note on it follow the request, so
-    the redo is about that card rather than a fresh guess.
+    the redo is about that card rather than a fresh guess. ``with_context`` adds the instruction to
+    read the word's usage off the screenshot sent alongside.
     """
     fields = ", ".join(template.fields)
-    request = f'Fill the fields ({fields}) of a flashcard for the English word "{word}".'
-    if feedback is None:
-        return request
-    previous = "\n".join(f"{name}: {value}" for name, value in feedback.previous.items())
-    return (
-        f"{request}\n\nThe learner was shown this card:\n{previous}\n"
-        f"The learner asked to change this about it: {feedback.note}"
-    )
+    parts = [f'Fill the fields ({fields}) of a flashcard for the English word "{word}".']
+    if with_context:
+        parts.append(CONTEXT_NOTE)
+    if feedback is not None:
+        previous = "\n".join(f"{name}: {value}" for name, value in feedback.previous.items())
+        parts.append(
+            f"The learner was shown this card:\n{previous}\nThe learner asked to change this about it: {feedback.note}"
+        )
+    return "\n\n".join(parts)
+
+
+def build_user_content(
+    word: str, template: CardTemplate, context: Image | None = None, feedback: CardFeedback | None = None
+) -> str | list[ChatCompletionContentPartParam]:
+    """The user-turn content: the prompt alone, or the prompt as a text part followed by the screenshot."""
+    if context is None:
+        return build_user_prompt(word, template, feedback)
+    return [
+        {"type": "text", "text": build_user_prompt(word, template, feedback, with_context=True)},
+        {"type": "image_url", "image_url": {"url": image_data_url(context)}},
+    ]
 
 
 # What each field is for. A discovered field with no entry is described by its name alone.

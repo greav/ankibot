@@ -1,19 +1,15 @@
+import logging
 from abc import abstractmethod
 from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Protocol
 
 from ankibot.application.common.card_gateway import CardGateway, ensure_front_back
+from ankibot.application.common.dto.image import Image
 from ankibot.application.common.selected_deck_store import SelectedDeckStore
 from ankibot.application.exceptions.generation import CardGenerationEmptyError, CardGenerationError
 
-
-@dataclass(frozen=True, kw_only=True)
-class SnippetImage:
-    """A screenshot of the passage, as the bytes the generator will read."""
-
-    data: bytes
-    mime_type: str
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -24,7 +20,7 @@ class Snippet:
     """
 
     text: str | None = None
-    image: SnippetImage | None = None
+    image: Image | None = None
     hint: str | None = None
 
     def __post_init__(self) -> None:
@@ -106,12 +102,14 @@ class GenerateCards:
 
         generated = await self._generator.generate(request.snippet, kept=request.kept, feedback=request.feedback)
         if blanks := blank_sided(generated):
+            logger.warning("Snippet cards left one-sided: %s", ", ".join(map(str, blanks)))
             raise CardGenerationError(f"The generator left card(s) {', '.join(map(str, blanks))} one-sided")
 
         # A kept card is never lost: when the generator finds nothing more, the batch is the kept
         # cards alone, and only a batch with nothing in it at all is empty.
         cards = merge_cards(request.kept, generated)
         if not cards:
+            logger.info("The snippet held nothing card-worthy")
             raise CardGenerationEmptyError
 
         return GeneratedSnippetCards(deck_name=target.deck_name, cards=cards)

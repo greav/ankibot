@@ -39,6 +39,13 @@ openai_card_generator:
   # Any model supporting json_schema structured outputs (the schema is sent strict).
   model: ${oc.env:OPENAI_MODEL,gpt-4o-mini}
 
+openai_word_suggester:
+  # Must support json_schema structured outputs AND image input: the screenshot goes to the model
+  # directly, there is no separate OCR step.
+  model: ${oc.env:OPENAI_MODEL,gpt-4o-mini}
+  # Upper bound on the words offered to pick from one screenshot; the model may return fewer.
+  max_candidates: 6
+
 openai_snippet_cards:
   # Must support json_schema structured outputs AND image input: screenshots go to the model
   # directly, there is no separate OCR step.

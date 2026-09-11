@@ -43,6 +43,7 @@ class AnkiWebVocabularyCardGateway(VocabularyCardGateway):
         deck_id = next((deck.id for deck in info.decks if deck.name == self._config.deck_name), None)
         if deck_id is None:
             available = ", ".join(deck.name for deck in info.decks)
+            logger.warning("The configured vocabulary deck is missing from AnkiWeb: %s", self._config.deck_name)
             raise AnkiTemplateTargetNotFoundError(
                 f"Deck '{self._config.deck_name}' not found in AnkiWeb. Available decks: {available}"
             )
@@ -52,6 +53,9 @@ class AnkiWebVocabularyCardGateway(VocabularyCardGateway):
         )
         if notetype_id is None:
             available = ", ".join(notetype.name for notetype in info.notetypes)
+            logger.warning(
+                "The configured vocabulary notetype is missing from AnkiWeb: %s", self._config.notetype_name
+            )
             raise AnkiTemplateTargetNotFoundError(
                 f"Notetype '{self._config.notetype_name}' not found in AnkiWeb. Available notetypes: {available}"
             )
@@ -88,4 +92,4 @@ class AnkiWebVocabularyCardGateway(VocabularyCardGateway):
             error=AnkiCardCreationError,
         )
 
-        logger.info("Added vocabulary card to AnkiWeb deck %s", target.deck_id, extra={"deck_id": target.deck_id})
+        logger.info("Added vocabulary card to AnkiWeb deck %s", target.deck_id)

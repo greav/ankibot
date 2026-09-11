@@ -5,8 +5,10 @@ text and images land here, a short word still there), the /snippet waiting state
 injection, on top of the handler bodies.
 """
 
+import logging
 from typing import Literal
 
+import pytest
 from aiogram import Dispatcher
 from aiogram.methods import AnswerCallbackQuery, EditMessageReplyMarkup, SendMessage
 from aiogram.types import Update
@@ -320,21 +322,23 @@ async def test_user_cannot_generate_cards_for_a_notetype_without_two_fields(
 
 
 async def test_user_can_see_exactly_what_was_saved_when_ankiweb_fails_midway(
-    dispatcher: Dispatcher, card_gateway: FakeCardGateway
+    dispatcher: Dispatcher, card_gateway: FakeCardGateway, caplog: pytest.LogCaptureFixture
 ) -> None:
-    """A batch AnkiWeb accepts only part of is reported as 'saved K of N', never as all-or-nothing."""
+    """A batch AnkiWeb accepts only part of is reported as 'saved K of N', to the user and to the log."""
     # Arrange
     session = RecordingSession()
     await send_snippet(dispatcher, session, LONG_TEXT, chat_id=15, user_id=15)
     card_gateway.fail_add_after = 1
 
     # Act
-    await tap_action(dispatcher, session, "save", chat_id=15, user_id=15)
+    with caplog.at_level(logging.WARNING):
+        await tap_action(dispatcher, session, "save", chat_id=15, user_id=15)
 
     # Assert
     assert session.last_edit == (
         "Saved 1 of 2 cards to Default, then AnkiWeb failed. Resend the snippet to add the rest."
     )
+    assert "Saved 1 of 2 snippet cards" in caplog.text
 
 
 async def test_user_cannot_save_anything_when_ankiweb_fails_at_the_first_card(

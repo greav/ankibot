@@ -43,6 +43,13 @@ class AnkiWebAuthenticator(AnkiAuthenticator):
 
     @override
     async def authenticate(self) -> None:
+        try:
+            await self._authenticate()
+        except AnkiAuthenticationError as error:
+            logger.warning("AnkiWeb authentication failed: %s", error)
+            raise
+
+    async def _authenticate(self) -> None:
         # Authentication is currently a side effect: the session cookies end up in the shared
         # httpx client's jar and authorize subsequent in-process requests. Once we support
         # cross-restart persistence or multi-user, we must capture the session cookies and

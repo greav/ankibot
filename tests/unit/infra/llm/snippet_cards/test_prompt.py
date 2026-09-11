@@ -1,6 +1,7 @@
 import base64
 
-from ankibot.application.add_snippet_cards import DraftCard, Snippet, SnippetImage
+from ankibot.application.add_snippet_cards import DraftCard, Snippet
+from ankibot.application.common.dto.image import Image
 from ankibot.infra.llm.snippet_cards.prompt import build_system_prompt, build_user_content
 
 PNG_BYTES = b"\x89PNG-not-really"
@@ -53,7 +54,7 @@ def test_user_content_can_end_with_the_feedback() -> None:
 def test_user_content_can_list_the_kept_cards_alongside_a_screenshot() -> None:
     """With an image snippet the kept cards travel as a text part before the image."""
     # Arrange
-    snippet = Snippet(image=SnippetImage(data=PNG_BYTES, mime_type="image/png"))
+    snippet = Snippet(image=Image(data=PNG_BYTES, mime_type="image/png"))
 
     # Act
     result = build_user_content(snippet, KEPT)
@@ -68,7 +69,7 @@ def test_user_content_can_list_the_kept_cards_alongside_a_screenshot() -> None:
 def test_user_content_can_carry_a_screenshot_as_a_data_url() -> None:
     """An image snippet becomes an image part whose data URL holds the exact bytes, base64-encoded."""
     # Arrange
-    snippet = Snippet(image=SnippetImage(data=PNG_BYTES, mime_type="image/png"))
+    snippet = Snippet(image=Image(data=PNG_BYTES, mime_type="image/png"))
 
     # Act
     result = build_user_content(snippet)
@@ -81,7 +82,7 @@ def test_user_content_can_carry_a_screenshot_as_a_data_url() -> None:
 def test_user_content_can_put_the_caption_hint_before_the_screenshot() -> None:
     """A photo caption reaches the model as a text part alongside the image."""
     # Arrange
-    snippet = Snippet(image=SnippetImage(data=PNG_BYTES, mime_type="image/jpeg"), hint="the definition")
+    snippet = Snippet(image=Image(data=PNG_BYTES, mime_type="image/jpeg"), hint="the definition")
 
     # Act
     result = build_user_content(snippet)

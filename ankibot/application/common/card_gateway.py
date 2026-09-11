@@ -1,5 +1,6 @@
 """The plain front/back card gateway, shared by every use case that writes such cards to AnkiWeb."""
 
+import logging
 from abc import abstractmethod
 from dataclasses import dataclass
 from typing import Protocol
@@ -40,7 +41,11 @@ class CardGateway(Protocol):
         raise NotImplementedError
 
 
+logger = logging.getLogger(__name__)
+
+
 def ensure_front_back(target: AddTarget) -> None:
     """Raise ``AnkiUnsupportedNotetypeError`` unless ``target`` takes a plain front/back note."""
     if target.field_count != FRONT_BACK_FIELD_COUNT:
+        logger.warning("AnkiWeb's current notetype %s is not front/back", target.notetype_id)
         raise AnkiUnsupportedNotetypeError

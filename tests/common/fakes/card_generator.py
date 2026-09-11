@@ -4,6 +4,7 @@ from collections.abc import Mapping
 from typing import override
 
 from ankibot.application.add_vocabulary_word import CardFeedback, CardGenerator
+from ankibot.application.common.dto.image import Image
 from ankibot.domain.card_template import CardTemplate
 
 
@@ -19,7 +20,12 @@ class FakeCardGenerator(CardGenerator):
 
     @override
     async def generate(
-        self, word: str, template: CardTemplate, *, feedback: CardFeedback | None = None
+        self,
+        word: str,
+        template: CardTemplate,
+        *,
+        context: Image | None = None,
+        feedback: CardFeedback | None = None,
     ) -> Mapping[str, str]:
         """Raise the configured error, or return ``values`` when there is none, whatever was asked."""
         if self.error is not None:

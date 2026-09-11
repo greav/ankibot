@@ -4,12 +4,12 @@ The response's shape is not built here: ``chat.completions.parse`` derives the s
 from the ``CardsAnswer`` model in ``parsing.py``.
 """
 
-import base64
 from collections.abc import Sequence
 
 from openai.types.chat import ChatCompletionContentPartParam
 
-from ankibot.application.add_snippet_cards import DraftCard, Snippet, SnippetImage
+from ankibot.application.add_snippet_cards import DraftCard, Snippet
+from ankibot.infra.llm.images import image_data_url
 
 
 def build_system_prompt(max_cards: int) -> str:
@@ -23,12 +23,6 @@ def build_system_prompt(max_cards: int) -> str:
         "plain text only in every field — no HTML and no Markdown formatting, since the values are "
         "stored and shown verbatim."
     )
-
-
-def image_data_url(image: SnippetImage) -> str:
-    """``image`` as the ``data:`` URL an OpenAI image part carries."""
-    encoded = base64.b64encode(image.data).decode("ascii")
-    return f"data:{image.mime_type};base64,{encoded}"
 
 
 def kept_cards_note(kept: Sequence[DraftCard]) -> str:

@@ -1,3 +1,4 @@
+import logging
 from dataclasses import dataclass
 
 from ankibot.application.add_snippet_cards.generate_cards import DraftCard
@@ -5,6 +6,8 @@ from ankibot.application.common.card_gateway import CardGateway, ensure_front_ba
 from ankibot.application.common.selected_deck_store import SelectedDeckStore
 from ankibot.application.exceptions.anki import SnippetCardsPartiallySavedError
 from ankibot.application.exceptions.base import ApplicationError
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -40,6 +43,9 @@ class SaveCards:
             except ApplicationError as error:
                 if saved == 0:
                     raise
+                logger.warning(
+                    "Saved %d of %d snippet cards before AnkiWeb failed: %s", saved, len(request.cards), error
+                )
                 raise SnippetCardsPartiallySavedError(
                     saved=saved, total=len(request.cards), deck_name=target.deck_name
                 ) from error

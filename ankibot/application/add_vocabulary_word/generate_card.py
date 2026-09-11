@@ -1,11 +1,15 @@
+import logging
 from abc import abstractmethod
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Protocol
 
 from ankibot.application.add_vocabulary_word.ports import VocabularyCardGateway
+from ankibot.application.common.dto.image import Image
 from ankibot.application.exceptions.generation import CardGenerationIncompleteError
 from ankibot.domain.card_template import CardTemplate, in_template_order, missing_fields
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -21,12 +25,19 @@ class CardGenerator(Protocol):
 
     @abstractmethod
     async def generate(
-        self, word: str, template: CardTemplate, *, feedback: CardFeedback | None = None
+        self,
+        word: str,
+        template: CardTemplate,
+        *,
+        context: Image | None = None,
+        feedback: CardFeedback | None = None,
     ) -> Mapping[str, str]:
         """Return a value per template field, keyed by field name.
 
-        ``feedback`` asks for a redo of a card already shown, with the learner's note on what to
-        change; the previous values travel with it so the note has something to be about.
+        ``context`` is a screenshot of the text ``word`` appears in: the fields quoting usage are
+        grounded in that sentence rather than invented. ``feedback`` asks for a redo of a card
+        already shown, with the learner's note on what to change; the previous values travel with
+        it so the note has something to be about.
 
         Raises ``CardGenerationUnavailableError`` when the backend cannot be reached, and
         ``CardGenerationError`` when its answer cannot be read.
@@ -37,6 +48,7 @@ class CardGenerator(Protocol):
 @dataclass(frozen=True, kw_only=True)
 class GenerateCardRequest:
     word: str
+    context: Image | None = None
     feedback: CardFeedback | None = None
 
 
@@ -55,8 +67,11 @@ class GenerateCard:
 
     async def execute(self, request: GenerateCardRequest) -> GeneratedCard:
         target = await self._gateway.target()
-        values = await self._generator.generate(request.word, target.template, feedback=request.feedback)
+        values = await self._generator.generate(
+            request.word, target.template, context=request.context, feedback=request.feedback
+        )
         if missing := missing_fields(target.template, values):
+            logger.warning("Vocabulary card left incomplete: %s empty", ", ".join(missing))
             raise CardGenerationIncompleteError(f"The generator left {', '.join(missing)} empty")
         return GeneratedCard(
             deck_name=target.deck_name,

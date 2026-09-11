@@ -17,8 +17,8 @@ class FakeSnippetCardsGenerator(SnippetCardsGenerator):
         self.error = error
 
     @override
-    async def generate(self, snippet: Snippet) -> Sequence[DraftCard]:
-        """Raise the configured error, or return ``cards`` when there is none."""
+    async def generate(self, snippet: Snippet, kept: Sequence[DraftCard] = ()) -> Sequence[DraftCard]:
+        """Raise the configured error, or return ``cards`` when there is none, whatever was kept."""
         if self.error is not None:
             raise self.error
         return list(self.cards)

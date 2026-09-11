@@ -5,7 +5,22 @@ from ankibot.presentation.handlers.snippet_cards import (
     format_cards_preview,
     format_partial_save,
     format_saved,
+    kept_cards,
 )
+
+STORED = [{"front": "Q1", "back": "A1"}, {"front": "Q2", "back": "A2"}]
+
+
+def test_kept_cards_can_carry_the_ticked_cards_over() -> None:
+    """Regenerate keeps exactly the ticked cards, as draft cards, in preview order."""
+    # Act / Assert
+    assert kept_cards(STORED, [False, True]) == (DraftCard(front="Q2", back="A2"),)
+
+
+def test_kept_cards_cannot_keep_anything_when_nothing_is_unticked() -> None:
+    """With every card ticked there is nothing to replace, so Regenerate starts the batch over."""
+    # Act / Assert
+    assert kept_cards(STORED, [True, True]) == ()
 
 
 def test_format_cards_preview_can_render_every_card_in_order() -> None:

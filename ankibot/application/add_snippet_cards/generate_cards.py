@@ -45,8 +45,11 @@ class SnippetCardsGenerator(Protocol):
     """Distills a passage into front/back flashcards."""
 
     @abstractmethod
-    async def generate(self, snippet: Snippet) -> Sequence[DraftCard]:
+    async def generate(self, snippet: Snippet, kept: Sequence[DraftCard] = ()) -> Sequence[DraftCard]:
         """Return the cards worth keeping from ``snippet``, possibly none.
+
+        ``kept`` are cards the learner has already accepted from this same passage: the answer
+        covers other facts and leaves room for them under the generator's own cap.
 
         Raises ``CardGenerationUnavailableError`` when the backend cannot be reached, and
         ``CardGenerationError`` when its answer cannot be read.
@@ -59,10 +62,18 @@ def blank_sided(cards: Sequence[DraftCard]) -> tuple[int, ...]:
     return tuple(index for index, card in enumerate(cards) if not card.front.strip() or not card.back.strip())
 
 
+def merge_cards(kept: Sequence[DraftCard], generated: Sequence[DraftCard]) -> tuple[DraftCard, ...]:
+    """The kept cards first, then the generated ones that do not repeat a kept card verbatim."""
+    return (*kept, *(card for card in generated if card not in kept))
+
+
 @dataclass(frozen=True, kw_only=True)
 class GenerateSnippetCardsRequest:
+    """``kept`` is what the learner accepted from a previous batch of the same snippet, to carry over."""
+
     user_id: int
     snippet: Snippet
+    kept: tuple[DraftCard, ...] = ()
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -88,10 +99,14 @@ class GenerateCards:
         target = await self._gateway.add_target(deck_id)
         ensure_front_back(target)
 
-        cards = await self._generator.generate(request.snippet)
-        if not cards:
-            raise CardGenerationEmptyError
-        if blanks := blank_sided(cards):
+        generated = await self._generator.generate(request.snippet, request.kept)
+        if blanks := blank_sided(generated):
             raise CardGenerationError(f"The generator left card(s) {', '.join(map(str, blanks))} one-sided")
 
-        return GeneratedSnippetCards(deck_name=target.deck_name, cards=tuple(cards))
+        # A kept card is never lost: when the generator finds nothing more, the batch is the kept
+        # cards alone, and only a batch with nothing in it at all is empty.
+        cards = merge_cards(request.kept, generated)
+        if not cards:
+            raise CardGenerationEmptyError
+
+        return GeneratedSnippetCards(deck_name=target.deck_name, cards=cards)

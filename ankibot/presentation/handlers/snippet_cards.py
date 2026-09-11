@@ -1,8 +1,10 @@
 """The snippet → generated cards dialog.
 
 A snippet enters two ways: implicitly — text longer than a word lookup, or an image — and
-explicitly through /snippet, whose waiting state takes text of any length. The generated cards are
-confirmed all-or-nothing under one Save/Regenerate/Cancel keyboard on the last preview message.
+explicitly through /snippet, whose waiting state takes text of any length. The generated cards sit
+under one keyboard on the last preview message: a numbered toggle per card, all selected at first,
+and Save / Regenerate / Cancel acting on the selection. Regenerate replaces the unticked cards and
+keeps the ticked ones — or, with nothing unticked, replaces the whole batch.
 """
 
 import contextlib
@@ -40,7 +42,7 @@ from ankibot.application.exceptions.generation import (
 )
 from ankibot.presentation.deck_picker import AUTH_FIRST, DECK_GONE, edit_into
 from ankibot.presentation.identity import TelegramUserId
-from ankibot.presentation.keyboards.generated_card import GeneratedCardCallback, generated_card_keyboard
+from ankibot.presentation.keyboards.snippet_cards import SnippetCardCallback, snippet_cards_keyboard, toggled
 from ankibot.presentation.message_kinds import plain_text, snippet_text
 
 logger = logging.getLogger(__name__)
@@ -63,6 +65,7 @@ UNSUPPORTED_NOTETYPE = (
     "Switch to a two-field notetype (e.g. Basic) in AnkiWeb's editor and try again."
 )
 GENERIC_FAILURE = "Failed to add the cards to AnkiWeb. Please try again later."
+NOTHING_SELECTED = "Select at least one card."
 CANCELLED = "Cancelled."
 
 
@@ -75,7 +78,7 @@ def format_cards_preview(deck_name: str, cards: Sequence[DraftCard]) -> list[str
     """Render the generated cards as preview texts, each within Telegram's message limit.
 
     One message when everything fits; the confirmation keyboard goes on the last one either way,
-    so the whole batch is confirmed at once.
+    its toggles numbered to match the cards listed here.
     """
     count = "1 card" if len(cards) == 1 else f"{len(cards)} cards"
     current = f"Add {count} to {deck_name}?"
@@ -132,18 +135,20 @@ async def _send_preview(
     user_id: TelegramUserId,
     snippet: Snippet,
     source: dict[str, str | None],
+    kept: tuple[DraftCard, ...] = (),
 ) -> None:
     """Generate cards for ``snippet`` and reply with their preview, or with the failure that stopped it.
 
     ``source`` is what Regenerate rebuilds the snippet from — its text, or its image's ``file_id``
-    to re-download; the bytes themselves never enter FSM data.
+    to re-download; the bytes themselves never enter FSM data. ``kept`` are the cards Regenerate
+    carries over from the previous batch.
     """
     bot = message.bot
     if bot is not None:
         await bot.send_chat_action(chat_id=message.chat.id, action="typing")
 
     try:
-        result = await generate_cards.execute(GenerateSnippetCardsRequest(user_id=user_id, snippet=snippet))
+        result = await generate_cards.execute(GenerateSnippetCardsRequest(user_id=user_id, snippet=snippet, kept=kept))
     except CardGenerationUnavailableError:
         await state.clear()
         await message.answer(GENERATOR_UNAVAILABLE)
@@ -177,11 +182,13 @@ async def _send_preview(
     *head, tail = format_cards_preview(result.deck_name, result.cards)
     for text in head:
         await message.answer(text)
-    preview = await message.answer(tail, reply_markup=generated_card_keyboard())
+    selected = [True] * len(result.cards)
+    preview = await message.answer(tail, reply_markup=snippet_cards_keyboard(selected))
     await state.set_state(SnippetCards.confirming)
     await state.update_data(
         {
             "cards": [{"front": card.front, "back": card.back} for card in result.cards],
+            "selected": selected,
             "preview_message_id": preview.message_id,
             **source,
         }
@@ -287,35 +294,77 @@ async def snippet_document_handler(
     )
 
 
-@router.callback_query(GeneratedCardCallback.filter(), SnippetCards.confirming)
+@router.callback_query(SnippetCardCallback.filter(), SnippetCards.confirming)
 async def snippet_cards_action_handler(
     callback: CallbackQuery,
-    callback_data: GeneratedCardCallback,
+    callback_data: SnippetCardCallback,
     state: FSMContext,
     generate_cards: FromDishka[GenerateCards],
     save_cards: FromDishka[SaveCards],
     user_id: FromDishka[TelegramUserId],
 ) -> None:
+    toast: str | None = None
     if callback_data.action == "cancel":
         await state.clear()
         await edit_into(callback, CANCELLED)
     elif callback_data.action == "regenerate":
         await _regenerate(callback, state, generate_cards, user_id)
+    elif callback_data.action == "toggle":
+        await _toggle(callback, callback_data.index, state)
     else:
-        await _save(callback, state, save_cards, user_id)
+        toast = await _save(callback, state, save_cards, user_id)
 
-    await callback.answer()
+    await callback.answer(toast)
+
+
+def _is_current_preview(callback: CallbackQuery, data: dict[str, object]) -> bool:
+    """Whether the tap landed on the preview FSM data still tracks.
+
+    A superseded preview normally loses its keyboard, but that strip is best-effort: a tap that
+    still arrives from it must not resurrect its keyboard or save a batch the user has moved on from.
+    """
+    return isinstance(callback.message, Message) and callback.message.message_id == data.get("preview_message_id")
+
+
+async def _toggle(callback: CallbackQuery, index: int, state: FSMContext) -> None:
+    """Flip one card in or out of the selection and redraw the keyboard to show it."""
+    if not isinstance(callback.message, Message):
+        return
+    data = await state.get_data()
+    if not _is_current_preview(callback, data):
+        return
+    selected: list[bool] = data.get("selected", [])
+    updated = list(toggled(selected, index))
+    await state.update_data({"selected": updated})
+    await callback.message.edit_reply_markup(reply_markup=snippet_cards_keyboard(updated))
+
+
+def kept_cards(stored: Sequence[dict[str, str]], selected: Sequence[bool]) -> tuple[DraftCard, ...]:
+    """The ticked cards Regenerate carries over — none when nothing is unticked, so it replaces them all."""
+    if all(selected):
+        return ()
+    return tuple(
+        DraftCard(front=item["front"], back=item["back"])
+        for item, chosen in zip(stored, selected, strict=True)
+        if chosen
+    )
 
 
 async def _regenerate(
     callback: CallbackQuery, state: FSMContext, generate_cards: GenerateCards, user_id: TelegramUserId
 ) -> None:
-    """Rebuild the snippet from FSM data — re-downloading an image by its file_id — and re-preview."""
+    """Rebuild the snippet from FSM data — re-downloading an image by its file_id — and re-preview.
+
+    The ticked cards come along unchanged; only the unticked ones are generated anew.
+    """
     if not isinstance(callback.message, Message):
         return
     message = callback.message
     bot = message.bot
     data = await state.get_data()
+    if not _is_current_preview(callback, data):
+        return
+    kept = kept_cards(data.get("cards", []), data.get("selected", []))
     hint: str | None = data.get("hint")
     text: str | None = data.get("text")
 
@@ -336,14 +385,29 @@ async def _regenerate(
         source = {"text": None, "file_id": file_id, "mime_type": mime_type, "hint": hint}
 
     await message.edit_reply_markup(reply_markup=None)
-    await _send_preview(message, state, generate_cards, user_id, snippet, source)
+    await _send_preview(message, state, generate_cards, user_id, snippet, source, kept)
 
 
-async def _save(callback: CallbackQuery, state: FSMContext, save_cards: SaveCards, user_id: TelegramUserId) -> None:
-    """Save the confirmed batch, answering with exactly what made it into AnkiWeb."""
+async def _save(
+    callback: CallbackQuery, state: FSMContext, save_cards: SaveCards, user_id: TelegramUserId
+) -> str | None:
+    """Save the selected cards, answering with exactly what made it into AnkiWeb.
+
+    Returns the toast to answer the tap with, when there is one: nothing selected leaves the
+    preview as it is and says so, instead of editing it away.
+    """
     data = await state.get_data()
+    if not _is_current_preview(callback, data):
+        return None
     stored: list[dict[str, str]] = data.get("cards", [])
-    cards = tuple(DraftCard(front=item["front"], back=item["back"]) for item in stored)
+    selected: list[bool] = data.get("selected", [True] * len(stored))
+    cards = tuple(
+        DraftCard(front=item["front"], back=item["back"])
+        for item, chosen in zip(stored, selected, strict=True)
+        if chosen
+    )
+    if not cards:
+        return NOTHING_SELECTED
 
     try:
         result = await save_cards.execute(SaveSnippetCardsRequest(user_id=user_id, cards=cards))
@@ -366,3 +430,4 @@ async def _save(callback: CallbackQuery, state: FSMContext, save_cards: SaveCard
     else:
         await state.clear()
         await edit_into(callback, format_saved(result.saved, result.deck_name))
+    return None

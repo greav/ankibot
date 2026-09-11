@@ -210,15 +210,18 @@ def make_callback_query(
     chat_id: int = TEST_CHAT_ID,
     user_id: int = TEST_USER_ID,
     message_text: str = "Choose a deck:",
+    message_id: int = 1,
 ) -> CallbackQuery:
     """Build the tap a handler receives, over the real picker message it was attached to.
 
-    Fabricating input assumes nothing about how Telegram behaves; only reading a reply back would.
+    ``message_id`` identifies that message for a handler that checks the tap landed on the preview
+    it still tracks. Fabricating input assumes nothing about how Telegram behaves; only reading a
+    reply back would.
     """
     return CallbackQuery(
         id="1",
         from_user=User(id=user_id, is_bot=False, first_name="Test"),
         chat_instance="1",
         data=data,
-        message=make_message(bot, text=message_text, chat_id=chat_id, user_id=user_id),
+        message=make_message(bot, text=message_text, chat_id=chat_id, user_id=user_id, message_id=message_id),
     ).as_(bot)

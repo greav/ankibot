@@ -86,6 +86,31 @@ async def test_generator_can_distill_a_text_snippet_with_a_strict_schema() -> No
     assert json_schema["schema"]["additionalProperties"] is False
 
 
+async def test_generator_can_leave_room_for_the_kept_cards_under_the_cap() -> None:
+    """Kept cards count against max_cards: the model is asked for the remainder and cut to it."""
+    # Arrange
+    requests: list[httpx2.Request] = []
+
+    async def handler(request: httpx2.Request) -> httpx2.Response:
+        requests.append(request)
+        body = chat_completion_body(content=cards_content(("Q3", "A3"), ("Q4", "A4"), ("Q5", "A5")))
+        return httpx2.Response(200, json=body)
+
+    generator, client = make_generator(handler, max_cards=4)
+    kept = (DraftCard(front="Q1", back="A1"), DraftCard(front="Q2", back="A2"))
+
+    # Act
+    async with client:
+        result = await generator.generate(TEXT_SNIPPET, kept=kept, feedback="shorter backs")
+
+    # Assert
+    assert result == (DraftCard(front="Q3", back="A3"), DraftCard(front="Q4", back="A4"))
+    sent = json.loads(requests[0].content)
+    assert "at most 2" in sent["messages"][0]["content"]
+    assert "- Q1 — A1\n- Q2 — A2" in sent["messages"][1]["content"]
+    assert sent["messages"][1]["content"].endswith("shorter backs")
+
+
 async def test_generator_can_send_a_screenshot_as_an_image_part() -> None:
     """An image snippet reaches OpenAI as an image_url content part carrying the bytes as a data URL."""
     # Arrange

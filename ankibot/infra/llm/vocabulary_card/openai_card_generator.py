@@ -3,7 +3,7 @@ from typing import override
 
 from openai import APIConnectionError, APIStatusError, APITimeoutError, AsyncOpenAI, RateLimitError
 
-from ankibot.application.add_vocabulary_word.generate_card import CardGenerator
+from ankibot.application.add_vocabulary_word.generate_card import CardFeedback, CardGenerator
 from ankibot.application.exceptions.generation import CardGenerationError, CardGenerationUnavailableError
 from ankibot.domain.card_template import CardTemplate
 from ankibot.infra.llm.vocabulary_card.parsing import parse_fields
@@ -25,13 +25,15 @@ class OpenAICardGenerator(CardGenerator):
         self._client = client
 
     @override
-    async def generate(self, word: str, template: CardTemplate) -> dict[str, str]:
+    async def generate(
+        self, word: str, template: CardTemplate, *, feedback: CardFeedback | None = None
+    ) -> dict[str, str]:
         try:
             response = await self._client.chat.completions.create(
                 model=self._config.model,
                 messages=[
                     {"role": "system", "content": SYSTEM_PROMPT},
-                    {"role": "user", "content": build_user_prompt(word, template)},
+                    {"role": "user", "content": build_user_prompt(word, template, feedback)},
                 ],
                 response_format={
                     "type": "json_schema",

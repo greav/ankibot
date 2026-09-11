@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import override
 
@@ -39,13 +40,18 @@ class OpenAISnippetCardsGenerator(SnippetCardsGenerator):
         self._client = client
 
     @override
-    async def generate(self, snippet: Snippet) -> tuple[DraftCard, ...]:
+    async def generate(
+        self, snippet: Snippet, *, kept: Sequence[DraftCard] = (), feedback: str | None = None
+    ) -> tuple[DraftCard, ...]:
+        # The kept cards count against the cap, so the batch as a whole stays within it; the model
+        # is always allowed at least one, or the call would be pointless.
+        remaining = max(self._config.max_cards - len(kept), 1)
         try:
             response = await self._client.chat.completions.parse(
                 model=self._config.model,
                 messages=[
-                    {"role": "system", "content": build_system_prompt(self._config.max_cards)},
-                    {"role": "user", "content": build_user_content(snippet)},
+                    {"role": "system", "content": build_system_prompt(remaining)},
+                    {"role": "user", "content": build_user_content(snippet, kept, feedback)},
                 ],
                 response_format=CardsAnswer,
             )
@@ -64,4 +70,4 @@ class OpenAISnippetCardsGenerator(SnippetCardsGenerator):
         if message.parsed is None:
             raise CardGenerationError("The card generator returned no content")
 
-        return to_draft_cards(message.parsed, max_cards=self._config.max_cards)
+        return to_draft_cards(message.parsed, max_cards=remaining)

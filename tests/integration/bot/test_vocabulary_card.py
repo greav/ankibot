@@ -20,6 +20,7 @@ from ankibot.application.exceptions.anki import (
 )
 from ankibot.application.exceptions.generation import CardGenerationUnavailableError
 from ankibot.domain.card_template import CardTemplate
+from ankibot.presentation.handlers.vocabulary_card import ASK_FEEDBACK, NOT_FEEDBACK
 from ankibot.presentation.keyboards.decks import DeckCallback
 from ankibot.presentation.keyboards.generated_card import GeneratedCardCallback
 from ankibot.presentation.message_kinds import MAX_WORD_LENGTH
@@ -70,7 +71,7 @@ async def pick_deck(
 async def tap_action(
     dispatcher: Dispatcher,
     session: RecordingSession,
-    action: Literal["save", "regenerate", "cancel"],
+    action: Literal["save", "regenerate", "feedback", "cancel"],
     *,
     chat_id: int,
     user_id: int,
@@ -373,3 +374,52 @@ async def test_two_users_can_generate_previews_concurrently_without_state_mixing
     # Assert
     assert session_a.last_edit == "Added to English Words V2."
     assert session_b.last_edit == "Added to English Words V2."
+
+
+async def test_user_can_regenerate_a_word_card_with_feedback(
+    dispatcher: Dispatcher, card_generator: FakeCardGenerator
+) -> None:
+    """'Regenerate with feedback' asks for a note, and the note produces a fresh preview."""
+    # Arrange
+    session = RecordingSession()
+    await send_word(dispatcher, session, "serendipity", chat_id=61, user_id=61)
+    card_generator.values = {"Word": "serendipity", "Meaning": "a lucky find", "Example": "Pure serendipity."}
+
+    # Act
+    await tap_action(dispatcher, session, "feedback", chat_id=61, user_id=61)
+    asked = session.last_answer
+    await send_word(dispatcher, session, "simpler meaning", chat_id=61, user_id=61, preview_message_id=401)
+
+    # Assert
+    assert asked == ASK_FEEDBACK
+    assert session.last_answer == (
+        "Add to English Words V2?\n\nWord: serendipity\nMeaning: a lucky find\nExample: Pure serendipity."
+    )
+
+
+async def test_user_can_still_use_the_preview_buttons_while_asked_for_feedback(dispatcher: Dispatcher) -> None:
+    """The question is not a trap: Save on the preview still works instead of being read as a note."""
+    # Arrange
+    session = RecordingSession()
+    await send_word(dispatcher, session, "serendipity", chat_id=62, user_id=62)
+    await tap_action(dispatcher, session, "feedback", chat_id=62, user_id=62)
+
+    # Act
+    await tap_action(dispatcher, session, "save", chat_id=62, user_id=62)
+
+    # Assert
+    assert session.last_edit == "Added to English Words V2."
+
+
+async def test_user_cannot_send_a_blank_note_as_word_feedback(dispatcher: Dispatcher) -> None:
+    """Whitespace in place of a note is re-asked, not sent to the generator or read as a new word."""
+    # Arrange
+    session = RecordingSession()
+    await send_word(dispatcher, session, "serendipity", chat_id=63, user_id=63)
+    await tap_action(dispatcher, session, "feedback", chat_id=63, user_id=63)
+
+    # Act
+    await send(dispatcher, session, "   ", chat_id=63, user_id=63)
+
+    # Assert
+    assert session.last_answer == NOT_FEEDBACK

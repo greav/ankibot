@@ -6,6 +6,7 @@ import httpx2
 import pytest
 from openai import AsyncOpenAI
 
+from ankibot.application.add_vocabulary_word import CardFeedback
 from ankibot.application.exceptions.generation import CardGenerationError, CardGenerationUnavailableError
 from ankibot.domain.card_template import CardTemplate
 from ankibot.infra.llm.vocabulary_card.openai_card_generator import OpenAICardGenerator, OpenAICardGeneratorConfig
@@ -46,6 +47,30 @@ def make_generator(handler: OpenAIHandler) -> tuple[OpenAICardGenerator, httpx2.
     openai_client = AsyncOpenAI(api_key=FAKE_API_KEY, http_client=client, max_retries=0)
     generator = OpenAICardGenerator(OpenAICardGeneratorConfig(model="gpt-4o-mini"), openai_client)
     return generator, client
+
+
+async def test_generator_can_ask_for_a_redo_with_the_learners_note() -> None:
+    """Feedback reaches OpenAI in the user turn, with the card it is about."""
+    # Arrange
+    requests: list[httpx2.Request] = []
+
+    async def handler(request: httpx2.Request) -> httpx2.Response:
+        requests.append(request)
+        body = chat_completion_body(content=json.dumps({"Word": "hello", "Meaning": "a greeting", "Example": "Hi!"}))
+        return httpx2.Response(200, json=body)
+
+    generator, client = make_generator(handler)
+    feedback = CardFeedback(note="shorter example", previous={"Word": "hello", "Meaning": "hi", "Example": "Hello!"})
+
+    # Act
+    async with client:
+        await generator.generate("hello", TEMPLATE, feedback=feedback)
+
+    # Assert
+    sent = json.loads(requests[0].content)
+    user_turn = sent["messages"][1]["content"]
+    assert "Example: Hello!" in user_turn
+    assert user_turn.endswith("shorter example")
 
 
 async def test_generator_can_fill_a_card_with_a_strict_schema() -> None:

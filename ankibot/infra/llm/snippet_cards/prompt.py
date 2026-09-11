@@ -5,10 +5,11 @@ from the ``CardsAnswer`` model in ``parsing.py``.
 """
 
 import base64
+from collections.abc import Sequence
 
 from openai.types.chat import ChatCompletionContentPartParam
 
-from ankibot.application.add_snippet_cards import Snippet, SnippetImage
+from ankibot.application.add_snippet_cards import DraftCard, Snippet, SnippetImage
 
 
 def build_system_prompt(max_cards: int) -> str:
@@ -30,14 +31,37 @@ def image_data_url(image: SnippetImage) -> str:
     return f"data:{image.mime_type};base64,{encoded}"
 
 
-def build_user_content(snippet: Snippet) -> str | list[ChatCompletionContentPartParam]:
-    """The user-turn content: the passage's text, or its screenshot as an image part."""
+def kept_cards_note(kept: Sequence[DraftCard]) -> str:
+    """The instruction listing the cards the learner already kept, so the model covers other facts."""
+    listed = "\n".join(f"- {card.front} — {card.back}" for card in kept)
+    return f"The learner already kept these cards from this passage. Do not repeat them; cover other facts:\n{listed}"
+
+
+def feedback_note(feedback: str) -> str:
+    """The learner's note on what to change, framed as being about the cards being replaced."""
+    return f"The learner asked to change this about the cards being replaced: {feedback}"
+
+
+def build_user_content(
+    snippet: Snippet, kept: Sequence[DraftCard] = (), feedback: str | None = None
+) -> str | list[ChatCompletionContentPartParam]:
+    """The user-turn content: the passage's text, or its screenshot as an image part.
+
+    The hint, the kept cards and the feedback, whichever are present, follow the passage as
+    further instructions in that order.
+    """
+    notes = []
+    if snippet.hint is not None:
+        notes.append(f"Focus on: {snippet.hint}")
+    if kept:
+        notes.append(kept_cards_note(kept))
+    if feedback is not None:
+        notes.append(feedback_note(feedback))
+
     if snippet.text is not None:
-        return snippet.text if snippet.hint is None else f"{snippet.text}\n\nFocus on: {snippet.hint}"
+        return "\n\n".join([snippet.text, *notes])
     if snippet.image is not None:
-        parts: list[ChatCompletionContentPartParam] = []
-        if snippet.hint is not None:
-            parts.append({"type": "text", "text": f"Focus on: {snippet.hint}"})
+        parts: list[ChatCompletionContentPartParam] = [{"type": "text", "text": note} for note in notes]
         parts.append({"type": "image_url", "image_url": {"url": image_data_url(snippet.image)}})
         return parts
     msg = "A snippet carries exactly one of text or image"  # Snippet.__post_init__ upholds this.

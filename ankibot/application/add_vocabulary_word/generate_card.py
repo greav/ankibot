@@ -8,12 +8,25 @@ from ankibot.application.exceptions.generation import CardGenerationIncompleteEr
 from ankibot.domain.card_template import CardTemplate, in_template_order, missing_fields
 
 
+@dataclass(frozen=True, kw_only=True)
+class CardFeedback:
+    """The learner's note on what to change about ``previous``, the card they were shown."""
+
+    note: str
+    previous: Mapping[str, str]
+
+
 class CardGenerator(Protocol):
     """Fills a card template's fields for one word."""
 
     @abstractmethod
-    async def generate(self, word: str, template: CardTemplate) -> Mapping[str, str]:
+    async def generate(
+        self, word: str, template: CardTemplate, *, feedback: CardFeedback | None = None
+    ) -> Mapping[str, str]:
         """Return a value per template field, keyed by field name.
+
+        ``feedback`` asks for a redo of a card already shown, with the learner's note on what to
+        change; the previous values travel with it so the note has something to be about.
 
         Raises ``CardGenerationUnavailableError`` when the backend cannot be reached, and
         ``CardGenerationError`` when its answer cannot be read.
@@ -24,6 +37,7 @@ class CardGenerator(Protocol):
 @dataclass(frozen=True, kw_only=True)
 class GenerateCardRequest:
     word: str
+    feedback: CardFeedback | None = None
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -41,7 +55,7 @@ class GenerateCard:
 
     async def execute(self, request: GenerateCardRequest) -> GeneratedCard:
         target = await self._gateway.target()
-        values = await self._generator.generate(request.word, target.template)
+        values = await self._generator.generate(request.word, target.template, feedback=request.feedback)
         if missing := missing_fields(target.template, values):
             raise CardGenerationIncompleteError(f"The generator left {', '.join(missing)} empty")
         return GeneratedCard(

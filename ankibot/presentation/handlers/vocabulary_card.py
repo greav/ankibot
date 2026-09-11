@@ -2,7 +2,9 @@
 
 A word enters two ways: implicitly — plain text short enough to read as a lookup — and explicitly
 through /word, whose waiting state takes text of any length. The generated card is confirmed under
-one Save/Regenerate/Cancel keyboard on the preview message.
+one keyboard on the preview message: Save / Cancel, Regenerate, and "Regenerate with feedback",
+which asks what to change first. The keyboard stays live while the note is awaited, so any of its
+buttons is the way out of that question.
 """
 
 import contextlib
@@ -17,7 +19,13 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message
 from dishka import FromDishka
 
-from ankibot.application.add_vocabulary_word import GenerateCard, GenerateCardRequest, SaveCard, SaveCardRequest
+from ankibot.application.add_vocabulary_word import (
+    CardFeedback,
+    GenerateCard,
+    GenerateCardRequest,
+    SaveCard,
+    SaveCardRequest,
+)
 from ankibot.application.exceptions.anki import AnkiSessionExpiredError, AnkiTemplateTargetNotFoundError
 from ankibot.application.exceptions.base import ApplicationError
 from ankibot.application.exceptions.generation import CardGenerationError, CardGenerationUnavailableError
@@ -34,12 +42,15 @@ NOT_A_WORD = "That doesn't look like a word. Send a word to make a card from."
 GENERATOR_UNAVAILABLE = "The card generator is unavailable. Please try again later."
 GENERATION_FAILED = "Couldn't generate a card for that word. Try again, or rephrase it."
 GENERIC_FAILURE = "Failed to add the card to AnkiWeb. Please try again later."
+ASK_FEEDBACK = "What should change in the regenerated card? Send a note, or use the buttons above."
+NOT_FEEDBACK = "That doesn't look like a note. Say what should change, or use the buttons above."
 CANCELLED = "Cancelled."
 
 
 class WordCard(StatesGroup):
     waiting_for_word = State()
     confirming = State()
+    waiting_for_feedback = State()
 
 
 def format_card_preview(deck_name: str, fields: Sequence[tuple[str, str]]) -> str:
@@ -59,14 +70,23 @@ async def _clear_previous_keyboard(message: Message, state: FSMContext) -> None:
         await bot.edit_message_reply_markup(chat_id=message.chat.id, message_id=preview_message_id, reply_markup=None)
 
 
-async def _send_preview(message: Message, state: FSMContext, generate_card: GenerateCard, word: str) -> None:
-    """Generate a card for ``word`` and reply with its preview, or with the failure that stopped it."""
+async def _send_preview(
+    message: Message,
+    state: FSMContext,
+    generate_card: GenerateCard,
+    word: str,
+    feedback: CardFeedback | None = None,
+) -> None:
+    """Generate a card for ``word`` and reply with its preview, or with the failure that stopped it.
+
+    ``feedback`` is the learner's note on the card shown before, for a redo rather than a fresh take.
+    """
     bot = message.bot
     if bot is not None:
         await bot.send_chat_action(chat_id=message.chat.id, action="typing")
 
     try:
-        result = await generate_card.execute(GenerateCardRequest(word=word))
+        result = await generate_card.execute(GenerateCardRequest(word=word, feedback=feedback))
     except CardGenerationUnavailableError:
         await state.clear()
         await message.answer(GENERATOR_UNAVAILABLE)
@@ -124,7 +144,21 @@ async def word_handler(message: Message, state: FSMContext, generate_card: FromD
     await _send_preview(message, state, generate_card, word)
 
 
-@router.callback_query(GeneratedCardCallback.filter(), WordCard.confirming)
+@router.message(WordCard.waiting_for_feedback, F.text, ~F.text.startswith("/"))
+async def feedback_text_handler(message: Message, state: FSMContext, generate_card: FromDishka[GenerateCard]) -> None:
+    """The note "Regenerate with feedback" asked for: redo the card with it."""
+    note = plain_text(message.text)
+    if note is None:
+        await message.answer(NOT_FEEDBACK)
+        return
+    data = await state.get_data()
+    word: str = data["word"]
+    previous: dict[str, str] = data["values"]
+    await _clear_previous_keyboard(message, state)
+    await _send_preview(message, state, generate_card, word, CardFeedback(note=note, previous=previous))
+
+
+@router.callback_query(GeneratedCardCallback.filter(), StateFilter(WordCard.confirming, WordCard.waiting_for_feedback))
 async def generated_card_action_handler(
     callback: CallbackQuery,
     callback_data: GeneratedCardCallback,
@@ -141,6 +175,10 @@ async def generated_card_action_handler(
         if isinstance(callback.message, Message):
             await callback.message.edit_reply_markup(reply_markup=None)
             await _send_preview(callback.message, state, generate_card, word)
+    elif callback_data.action == "feedback":
+        if isinstance(callback.message, Message):
+            await state.set_state(WordCard.waiting_for_feedback)
+            await callback.message.answer(ASK_FEEDBACK)
     else:
         data = await state.get_data()
         values: dict[str, str] = data["values"]

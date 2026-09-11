@@ -54,7 +54,7 @@ def card_gateway() -> FakeCardGateway:
     Session-scoped for the same reason as ``authenticator`` above; ``reset_card_gateway`` restores
     it before every test.
     """
-    return FakeCardGateway(decks=dict(DEFAULT_DECKS), current_deck_id=DEFAULT_DECK_ID)
+    return FakeCardGateway(decks=dict(DEFAULT_DECKS))
 
 
 @pytest.fixture(scope="session")
@@ -65,7 +65,7 @@ def deck_gateway() -> FakeDeckGateway:
 
 @pytest.fixture(scope="session")
 def selected_decks() -> FakeSelectedDeckStore:
-    """The deck choices behind the dispatcher; ``reset_selected_decks`` clears them per test."""
+    """The deck choices behind the dispatcher; ``reset_selected_decks`` restores them per test."""
     return FakeSelectedDeckStore()
 
 
@@ -145,7 +145,6 @@ def reset_authenticator(authenticator: FakeAnkiAuthenticator) -> None:
 def reset_card_gateway(card_gateway: FakeCardGateway) -> None:
     """Undo whatever the previous test asked the shared card gateway to do."""
     card_gateway.decks = dict(DEFAULT_DECKS)
-    card_gateway.current_deck_id = DEFAULT_DECK_ID
     card_gateway.notetype_id = 1
     card_gateway.field_count = 2
     card_gateway.error = None
@@ -162,8 +161,12 @@ def reset_deck_gateway(deck_gateway: FakeDeckGateway) -> None:
 
 @pytest.fixture(autouse=True)
 def reset_selected_decks(selected_decks: FakeSelectedDeckStore) -> None:
-    """Drop the deck choices the previous test made, so none leaks into this one."""
-    selected_decks.decks.clear()
+    """Start every allowed user on the Default deck, so a test about the deck itself picks another.
+
+    Nothing writes a card without a chosen deck, so an empty store would make every card test
+    begin with /decks; a test about the missing choice drops its own user instead.
+    """
+    selected_decks.decks = dict.fromkeys(range(1, MAX_ALLOWED_TEST_USER_ID + 1), DEFAULT_DECK_ID)
 
 
 @pytest.fixture(autouse=True)

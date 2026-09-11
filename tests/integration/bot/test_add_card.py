@@ -286,3 +286,21 @@ async def test_two_users_can_keep_different_selected_decks(dispatcher: Dispatche
     # Assert
     assert session_a.last_answer == "Card added to Default."
     assert session_b.last_answer == "Card added to Spanish."
+
+
+async def test_user_cannot_add_a_card_without_a_chosen_deck(
+    dispatcher: Dispatcher, selected_decks: FakeSelectedDeckStore
+) -> None:
+    """A deck choice lost mid-dialog is reported at the end, not replaced with AnkiWeb's current deck."""
+    # Arrange
+    session = RecordingSession()
+    await send(dispatcher, session, "/addcard", chat_id=30, user_id=30)
+    await pick_deck(dispatcher, session, DEFAULT_DECK_ID, chat_id=30, user_id=30)
+    await send(dispatcher, session, "hola", chat_id=30, user_id=30)
+    selected_decks.decks.pop(30)
+
+    # Act
+    await send(dispatcher, session, "hello", chat_id=30, user_id=30)
+
+    # Assert
+    assert session.last_answer == "Choose a deck with /decks first."

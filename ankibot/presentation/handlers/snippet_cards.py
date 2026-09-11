@@ -6,7 +6,9 @@ under one keyboard on the last preview message: a numbered toggle per card, all 
 and Save / Regenerate / Cancel acting on the selection. Regenerate replaces the unticked cards and
 keeps the ticked ones — or, with nothing unticked, replaces the whole batch. "Regenerate with
 feedback" does the same after asking what to change; the preview keyboard stays live meanwhile,
-so any of its buttons is the way out of that question.
+so any of its buttons is the way out of that question. "Change deck" sends the /decks picker as
+a separate message: the tapped deck is stored exactly as /decks stores it, and the preview's
+header is rewritten to name it, so what Save reports is what the header promised.
 """
 
 import contextlib
@@ -36,14 +38,26 @@ from ankibot.application.exceptions.anki import (
     SnippetCardsPartiallySavedError,
 )
 from ankibot.application.exceptions.base import ApplicationError
+from ankibot.application.exceptions.decks import NoDeckSelectedError
 from ankibot.application.exceptions.generation import (
     CardGenerationEmptyError,
     CardGenerationError,
     CardGenerationUnavailableError,
 )
-from ankibot.presentation.deck_picker import AUTH_FIRST, DECK_GONE, edit_into
+from ankibot.application.manage_decks import ListDecks, ListDecksRequest, SelectDeck
+from ankibot.presentation.deck_picker import (
+    AUTH_FIRST,
+    CHOOSE_A_DECK,
+    CHOOSE_DECK_FIRST,
+    DECK_GONE,
+    NO_DECKS,
+    deck_list_error_reply,
+    edit_into,
+    select_tapped_deck,
+)
 from ankibot.presentation.identity import TelegramUserId
 from ankibot.presentation.images import PHOTO_JPEG_MIME, download_image
+from ankibot.presentation.keyboards.decks import DeckCallback, deck_keyboard, page_of
 from ankibot.presentation.keyboards.snippet_cards import SnippetCardCallback, snippet_cards_keyboard, toggled
 from ankibot.presentation.message_kinds import plain_text, snippet_text
 
@@ -74,6 +88,7 @@ class SnippetCards(StatesGroup):
     waiting_for_snippet = State()
     confirming = State()
     waiting_for_feedback = State()
+    choosing_deck = State()
 
 
 def format_cards_preview(deck_name: str, cards: Sequence[DraftCard]) -> list[str]:
@@ -189,6 +204,10 @@ async def _send_preview(
         await state.clear()
         await message.answer(AUTH_FIRST)
         return
+    except NoDeckSelectedError:
+        await state.clear()
+        await message.answer(CHOOSE_DECK_FIRST)
+        return
     except AnkiDeckNotFoundError:
         await state.clear()
         await message.answer(DECK_GONE)
@@ -204,8 +223,13 @@ async def _send_preview(
         return
 
     *head, tail = format_cards_preview(result.deck_name, result.cards)
+    # The header names the deck; Change deck rewrites it in place, so its message is tracked
+    # separately from the keyboard's — they coincide unless the preview had to be split.
+    header_message_id: int | None = None
     for text in head:
-        await message.answer(text)
+        sent = await message.answer(text)
+        if header_message_id is None:
+            header_message_id = sent.message_id
     selected = [True] * len(result.cards)
     preview = await message.answer(tail, reply_markup=snippet_cards_keyboard(selected))
     await state.set_state(SnippetCards.confirming)
@@ -214,6 +238,7 @@ async def _send_preview(
             "cards": [{"front": card.front, "back": card.back} for card in result.cards],
             "selected": selected,
             "preview_message_id": preview.message_id,
+            "header_message_id": preview.message_id if header_message_id is None else header_message_id,
             **source,
         }
     )
@@ -251,7 +276,9 @@ async def snippet_cmd_handler(message: Message, state: FSMContext) -> None:
     await message.answer(SEND_A_SNIPPET)
 
 
-@router.message(StateFilter(None, SnippetCards.confirming), F.text.func(snippet_text).as_("snippet"))
+@router.message(
+    StateFilter(None, SnippetCards.confirming, SnippetCards.choosing_deck), F.text.func(snippet_text).as_("snippet")
+)
 async def snippet_text_handler(
     message: Message,
     snippet: str,
@@ -308,7 +335,13 @@ async def feedback_text_handler(
 
 
 @router.message(
-    StateFilter(None, SnippetCards.waiting_for_snippet, SnippetCards.confirming, SnippetCards.waiting_for_feedback),
+    StateFilter(
+        None,
+        SnippetCards.waiting_for_snippet,
+        SnippetCards.confirming,
+        SnippetCards.waiting_for_feedback,
+        SnippetCards.choosing_deck,
+    ),
     F.photo,
 )
 async def snippet_photo_handler(
@@ -325,7 +358,13 @@ async def snippet_photo_handler(
 
 
 @router.message(
-    StateFilter(None, SnippetCards.waiting_for_snippet, SnippetCards.confirming, SnippetCards.waiting_for_feedback),
+    StateFilter(
+        None,
+        SnippetCards.waiting_for_snippet,
+        SnippetCards.confirming,
+        SnippetCards.waiting_for_feedback,
+        SnippetCards.choosing_deck,
+    ),
     F.document.mime_type.startswith("image/"),
 )
 async def snippet_document_handler(
@@ -343,7 +382,8 @@ async def snippet_document_handler(
 
 
 @router.callback_query(
-    SnippetCardCallback.filter(), StateFilter(SnippetCards.confirming, SnippetCards.waiting_for_feedback)
+    SnippetCardCallback.filter(),
+    StateFilter(SnippetCards.confirming, SnippetCards.waiting_for_feedback, SnippetCards.choosing_deck),
 )
 async def snippet_cards_action_handler(
     callback: CallbackQuery,
@@ -351,6 +391,7 @@ async def snippet_cards_action_handler(
     state: FSMContext,
     generate_cards: FromDishka[GenerateCards],
     save_cards: FromDishka[SaveCards],
+    list_decks: FromDishka[ListDecks],
     user_id: FromDishka[TelegramUserId],
 ) -> None:
     toast: str | None = None
@@ -363,10 +404,33 @@ async def snippet_cards_action_handler(
         await _ask_feedback(callback, state)
     elif callback_data.action == "toggle":
         await _toggle(callback, callback_data.index, state)
+    elif callback_data.action == "deck":
+        toast = await _open_deck_picker(callback, state, list_decks, user_id)
     else:
         toast = await _save(callback, state, save_cards, user_id)
 
     await callback.answer(toast)
+
+
+@router.callback_query(DeckCallback.filter(), SnippetCards.choosing_deck)
+async def snippet_deck_chosen_handler(
+    callback: CallbackQuery,
+    callback_data: DeckCallback,
+    state: FSMContext,
+    select_deck: FromDishka[SelectDeck],
+    user_id: FromDishka[TelegramUserId],
+) -> None:
+    """A deck tapped in the picker Change deck sent: store it and re-address the pending preview.
+
+    The preview stands either way — Save resolves the deck afresh — so the dialog is back to
+    confirming even when the tap failed and the picker says why.
+    """
+    await state.set_state(SnippetCards.confirming)
+    deck_name = await select_tapped_deck(
+        callback, user_id, callback_data.id, select_deck, lambda name: f"Deck set to {name}."
+    )
+    if deck_name is not None:
+        await _readdress_preview(callback, state, deck_name)
 
 
 def _is_current_preview(callback: CallbackQuery, data: dict[str, object]) -> bool:
@@ -376,6 +440,57 @@ def _is_current_preview(callback: CallbackQuery, data: dict[str, object]) -> boo
     still arrives from it must not resurrect its keyboard or save a batch the user has moved on from.
     """
     return isinstance(callback.message, Message) and callback.message.message_id == data.get("preview_message_id")
+
+
+async def _open_deck_picker(
+    callback: CallbackQuery, state: FSMContext, list_decks: ListDecks, user_id: TelegramUserId
+) -> str | None:
+    """Send the /decks picker under the preview, or return the toast saying why it could not be shown.
+
+    The preview is left as it is in every case: a deck list that cannot be read is no reason to
+    lose a generated batch.
+    """
+    if not isinstance(callback.message, Message):
+        return None
+    data = await state.get_data()
+    if not _is_current_preview(callback, data):
+        return None
+    try:
+        result = await list_decks.execute(ListDecksRequest(user_id=user_id))
+    except ApplicationError as error:
+        return deck_list_error_reply(error)
+    if not result.decks:
+        return NO_DECKS
+
+    keyboard = deck_keyboard(page_of(result.decks, 0), result.selected_deck_id)
+    await callback.message.answer(CHOOSE_A_DECK, reply_markup=keyboard)
+    await state.set_state(SnippetCards.choosing_deck)
+    return None
+
+
+async def _readdress_preview(callback: CallbackQuery, state: FSMContext, deck_name: str) -> None:
+    """Rewrite the preview's header to name ``deck_name``, keeping the keyboard when they share a message.
+
+    Best-effort like the keyboard strip: the deck is already stored and the picker already says
+    so, so a header Telegram no longer lets us edit is not worth failing the tap over.
+    """
+    bot = callback.bot
+    if bot is None or not isinstance(callback.message, Message):
+        return
+    data = await state.get_data()
+    header_message_id = data.get("header_message_id")
+    if not isinstance(header_message_id, int):
+        return
+    stored: list[dict[str, str]] = data.get("cards", [])
+    cards = [DraftCard(front=item["front"], back=item["back"]) for item in stored]
+    header, *_ = format_cards_preview(deck_name, cards)
+    keyboard = None
+    if header_message_id == data.get("preview_message_id"):
+        keyboard = snippet_cards_keyboard(data.get("selected", [True] * len(cards)))
+    with contextlib.suppress(TelegramBadRequest):
+        await bot.edit_message_text(
+            text=header, chat_id=callback.message.chat.id, message_id=header_message_id, reply_markup=keyboard
+        )
 
 
 async def _toggle(callback: CallbackQuery, index: int, state: FSMContext) -> None:
@@ -464,6 +579,9 @@ async def _save(
     except AnkiSessionExpiredError:
         await state.clear()
         await edit_into(callback, AUTH_FIRST)
+    except NoDeckSelectedError:
+        await state.clear()
+        await edit_into(callback, CHOOSE_DECK_FIRST)
     except AnkiDeckNotFoundError:
         await state.clear()
         await edit_into(callback, DECK_GONE)

@@ -10,6 +10,7 @@ from ankibot.application.exceptions.anki import (
     AnkiInvalidUsernameError,
 )
 from ankibot.infra.anki.authenticator import AnkiWebAuthenticator, AnkiWebAuthenticatorConfig
+from ankibot.infra.logger import LoggerConfig, configure_root_logger
 from ankiweb.account.login_pb2 import (
     LOGIN_RESPONSE_STATUS_AUTHENTICATED,
     LOGIN_RESPONSE_STATUS_INVALID_PASS,
@@ -207,6 +208,32 @@ async def test_user_cannot_find_their_password_in_the_logs(
 
     # Assert
     assert anki_config.password not in caplog.text
+
+
+async def test_user_cannot_find_the_login_token_in_the_logs(
+    anki_config: AnkiWebAuthenticatorConfig,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Under the bot's logging setup the token exchange URL, ticket included, stays out of the log.
+
+    httpx reports every request's full URL at INFO; the bot's root logger configuration is what
+    keeps that line out, so the test runs under it rather than under pytest's bare capture.
+    """
+    # Arrange
+    root_logger = configure_root_logger(LoggerConfig(level="DEBUG", fmt="%(message)s"))
+    stream_handler = root_logger.handlers[-1]
+    try:
+        async with client_for(build_handler(LOGIN_RESPONSE_STATUS_AUTHENTICATED)) as client:
+            authenticator = AnkiWebAuthenticator(anki_config, client)
+
+            # Act
+            with caplog.at_level(logging.DEBUG):
+                await authenticator.authenticate()
+    finally:
+        root_logger.removeHandler(stream_handler)
+
+    # Assert
+    assert TOKEN not in caplog.text
 
 
 async def test_user_cannot_authenticate_when_ankiweb_serves_html(anki_config: AnkiWebAuthenticatorConfig) -> None:

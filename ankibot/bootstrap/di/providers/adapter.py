@@ -21,7 +21,7 @@ from ankibot.infra.llm.snippet_cards.openai_snippet_cards_generator import (
 )
 from ankibot.infra.llm.vocabulary_card.openai_card_generator import OpenAICardGenerator, OpenAICardGeneratorConfig
 from ankibot.infra.llm.vocabulary_card.openai_word_suggester import OpenAIWordSuggester, OpenAIWordSuggesterConfig
-from ankibot.infra.selected_decks import InMemorySelectedDeckStore
+from ankibot.infra.selected_decks import JsonFileSelectedDeckStore
 
 # One client for every AnkiWeb call, because AnkiWeb's session lives in its cookie jar: separate
 # clients would each need their own /auth.
@@ -38,7 +38,7 @@ class AdapterProvider(Provider):
     card_gateway = provide(WithParents[AnkiWebCardGateway])
     deck_gateway = provide(WithParents[AnkiWebDeckGateway])
     vocabulary_card_gateway = provide(WithParents[AnkiWebVocabularyCardGateway])
-    selected_decks = provide(WithParents[InMemorySelectedDeckStore])
+    selected_decks = provide(WithParents[JsonFileSelectedDeckStore])
 
     @provide
     async def http_client(self) -> AsyncIterator[httpx.AsyncClient]:

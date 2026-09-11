@@ -2,13 +2,16 @@
 # deploy timer re-fetches it from master on every tick, so this repository copy is the
 # source of truth — server-side edits last only until the next tick (see docs/deploy.md).
 #
-# The config ships inside the image (see the Dockerfile), so nothing is mounted here.
+# The config ships inside the image (see the Dockerfile), so only the bot's state is mounted:
+# ./data holds what must outlive a container (each user's /decks choice today).
 # For a hot config fix without a rebuild, see "Emergency config override" in docs/deploy.md.
 services:
   ankibot:
     image: ghcr.io/greav/ankibot:latest
     restart: unless-stopped
     env_file: .env
+    volumes:
+      - ./data:/opt/data
     logging:
       driver: json-file
       options:

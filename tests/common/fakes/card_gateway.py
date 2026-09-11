@@ -20,13 +20,11 @@ class FakeCardGateway(CardGateway):
         self,
         *,
         decks: dict[int, str],
-        current_deck_id: int,
         notetype_id: int = 1,
         field_count: int = 2,
         error: Exception | None = None,
     ) -> None:
         self.decks = decks
-        self.current_deck_id = current_deck_id
         self.notetype_id = notetype_id
         self.field_count = field_count
         self.error = error
@@ -38,18 +36,10 @@ class FakeCardGateway(CardGateway):
         self._added = 0
 
     @override
-    async def add_target(self, deck_id: int | None) -> AddTarget:
+    async def add_target(self, deck_id: int) -> AddTarget:
         """Raise the configured error, or resolve ``deck_id`` against the fake's deck list."""
         if self.error is not None:
             raise self.error
-
-        if deck_id is None:
-            return AddTarget(
-                deck_id=self.current_deck_id,
-                notetype_id=self.notetype_id,
-                deck_name=self.decks[self.current_deck_id],
-                field_count=self.field_count,
-            )
 
         name = self.decks.get(deck_id)
         if name is None:

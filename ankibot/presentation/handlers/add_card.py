@@ -13,11 +13,13 @@ from ankibot.application.exceptions.anki import (
     AnkiUnsupportedNotetypeError,
 )
 from ankibot.application.exceptions.base import ApplicationError
+from ankibot.application.exceptions.decks import NoDeckSelectedError
 from ankibot.application.manage_cards import CreateCard, CreateCardRequest
 from ankibot.application.manage_decks import ListDecks, ListDecksRequest, SelectDeck
 from ankibot.presentation.deck_picker import (
     AUTH_FIRST,
     CHOOSE_A_DECK,
+    CHOOSE_DECK_FIRST,
     DECK_GONE,
     NO_DECKS,
     deck_list_error_reply,
@@ -96,7 +98,7 @@ async def deck_chosen_handler(
         select_deck,
         lambda name: f"Deck: {name}. Send the front side.",
     )
-    if chosen:
+    if chosen is not None:
         await state.set_state(AddCard.waiting_for_front)
     else:
         await state.clear()
@@ -131,6 +133,9 @@ async def back_handler(
 
     try:
         result = await create_card.execute(CreateCardRequest(user_id=user_id, front=front, back=back))
+    except NoDeckSelectedError:
+        await state.clear()
+        await message.answer(CHOOSE_DECK_FIRST)
     except AnkiDeckNotFoundError:
         await state.clear()
         await message.answer(DECK_GONE)

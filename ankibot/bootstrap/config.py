@@ -12,6 +12,7 @@ from ankibot.infra.llm.snippet_cards.openai_snippet_cards_generator import OpenA
 from ankibot.infra.llm.vocabulary_card.openai_card_generator import OpenAICardGeneratorConfig
 from ankibot.infra.llm.vocabulary_card.openai_word_suggester import OpenAIWordSuggesterConfig
 from ankibot.infra.logger import LoggerConfig
+from ankibot.infra.selected_decks import JsonFileSelectedDeckStoreConfig
 from ankibot.presentation.middlewares.access import AccessConfig
 
 
@@ -34,6 +35,7 @@ class Config:
     anki_web: AnkiWebAuthenticatorConfig
     anki_svc: AnkiSvcClientConfig
     anki_vocabulary_cards: AnkiWebVocabularyCardGatewayConfig
+    selected_decks: JsonFileSelectedDeckStoreConfig
     card_generator: CardGeneratorConfig
     openai_client: OpenAIClientConfig
     openai_card_generator: OpenAICardGeneratorConfig

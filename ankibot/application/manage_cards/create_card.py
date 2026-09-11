@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 
 from ankibot.application.common.card_gateway import CardGateway, ensure_front_back
-from ankibot.application.common.selected_deck_store import SelectedDeckStore
+from ankibot.application.common.selected_deck_store import SelectedDeckStore, chosen_deck
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -22,7 +22,7 @@ class CreateCard:
         self._selected_decks = selected_decks
 
     async def execute(self, request: CreateCardRequest) -> CreateCardResult:
-        deck_id = await self._selected_decks.get(request.user_id)
+        deck_id = await chosen_deck(self._selected_decks, request.user_id)
         target = await self._gateway.add_target(deck_id)
         ensure_front_back(target)
         await self._gateway.add_card(target, request.front, request.back)

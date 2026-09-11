@@ -17,8 +17,11 @@ from ankibot.application.add_snippet_cards import DraftCard
 from ankibot.application.exceptions.anki import AnkiSessionExpiredError
 from ankibot.application.exceptions.generation import CardGenerationUnavailableError
 from ankibot.presentation.handlers.snippet_cards import ASK_FEEDBACK, NOT_FEEDBACK, NOTHING_SELECTED
+from ankibot.presentation.keyboards.decks import DeckCallback
 from ankibot.presentation.keyboards.snippet_cards import SnippetCardCallback
 from tests.common.fakes.card_gateway import FakeCardGateway
+from tests.common.fakes.deck_gateway import FakeDeckGateway
+from tests.common.fakes.selected_deck_store import FakeSelectedDeckStore
 from tests.common.fakes.snippet_cards_generator import FakeSnippetCardsGenerator
 from tests.common.telegram import (
     RecordingSession,
@@ -88,7 +91,7 @@ async def send_photo(
 async def tap_action(
     dispatcher: Dispatcher,
     session: RecordingSession,
-    action: Literal["toggle", "save", "regenerate", "feedback", "cancel"],
+    action: Literal["toggle", "save", "regenerate", "feedback", "cancel", "deck"],
     *,
     chat_id: int,
     user_id: int,
@@ -592,3 +595,119 @@ async def test_user_can_give_feedback_on_a_photo_snippet(dispatcher: Dispatcher)
 
     # Assert
     assert session.answers.count(EXPECTED_PREVIEW) == 2
+
+
+async def pick_deck(
+    dispatcher: Dispatcher, session: RecordingSession, deck_id: int, *, chat_id: int, user_id: int
+) -> None:
+    """Tap a deck on the picker Change deck sent; it is its own message, not the preview."""
+    bot = make_bot(session)
+    callback = make_callback_query(
+        bot, DeckCallback(id=deck_id).pack(), chat_id=chat_id, user_id=user_id, message_id=150
+    )
+    await dispatcher.feed_update(bot, Update(update_id=4, callback_query=callback))
+
+
+async def test_user_can_change_the_deck_from_the_preview(
+    dispatcher: Dispatcher, selected_decks: FakeSelectedDeckStore
+) -> None:
+    """Change deck opens the /decks picker; the tapped deck is remembered, named in the preview and saved to."""
+    # Arrange
+    session = RecordingSession()
+    await send_snippet(dispatcher, session, LONG_TEXT, chat_id=31, user_id=31)
+
+    # Act
+    await tap_action(dispatcher, session, "deck", chat_id=31, user_id=31)
+    assert session.last_answer == "Choose a deck:"
+    await pick_deck(dispatcher, session, 2, chat_id=31, user_id=31)
+    await tap_action(dispatcher, session, "save", chat_id=31, user_id=31)
+
+    # Assert
+    assert session.edits[-3:] == [
+        "Deck set to Spanish.",
+        EXPECTED_PREVIEW.replace("to Default?", "to Spanish?"),
+        "Added 2 cards to Spanish.",
+    ]
+    assert selected_decks.decks[31] == 2
+
+
+async def test_user_can_still_save_while_the_deck_picker_is_open(dispatcher: Dispatcher) -> None:
+    """The preview keyboard stays live under an open picker: Save without picking keeps the current deck."""
+    # Arrange
+    session = RecordingSession()
+    await send_snippet(dispatcher, session, LONG_TEXT, chat_id=32, user_id=32)
+    await tap_action(dispatcher, session, "deck", chat_id=32, user_id=32)
+
+    # Act
+    await tap_action(dispatcher, session, "save", chat_id=32, user_id=32)
+
+    # Assert
+    assert session.last_edit == "Added 2 cards to Default."
+
+
+async def test_user_cannot_open_the_deck_picker_without_authenticating(
+    dispatcher: Dispatcher, deck_gateway: FakeDeckGateway
+) -> None:
+    """A deck list AnkiWeb refuses is a toast on the tap; the generated batch is not lost over it."""
+    # Arrange
+    session = RecordingSession()
+    await send_snippet(dispatcher, session, LONG_TEXT, chat_id=33, user_id=33)
+    deck_gateway.error = AnkiSessionExpiredError()
+
+    # Act
+    await tap_action(dispatcher, session, "deck", chat_id=33, user_id=33)
+
+    # Assert
+    toasts = [request.text for request in session.requests if isinstance(request, AnswerCallbackQuery)]
+    assert toasts[-1] == "Run /auth first."
+    assert session.answers == [EXPECTED_PREVIEW]
+    assert session.edits == []
+
+
+async def test_user_cannot_change_to_a_deck_that_no_longer_exists(dispatcher: Dispatcher) -> None:
+    """A deck deleted since the picker was drawn is refused, and Save still lands in the current deck."""
+    # Arrange
+    session = RecordingSession()
+    await send_snippet(dispatcher, session, LONG_TEXT, chat_id=34, user_id=34)
+    await tap_action(dispatcher, session, "deck", chat_id=34, user_id=34)
+
+    # Act
+    await pick_deck(dispatcher, session, 99, chat_id=34, user_id=34)
+    await tap_action(dispatcher, session, "save", chat_id=34, user_id=34)
+
+    # Assert
+    assert session.edits == [
+        "That deck no longer exists in AnkiWeb. Run /decks again.",
+        "Added 2 cards to Default.",
+    ]
+
+
+async def test_user_cannot_generate_cards_without_choosing_a_deck(
+    dispatcher: Dispatcher, selected_decks: FakeSelectedDeckStore
+) -> None:
+    """With no deck chosen the snippet is refused up front, never generated into AnkiWeb's current deck."""
+    # Arrange
+    selected_decks.decks.pop(35)
+    session = RecordingSession()
+
+    # Act
+    await send(dispatcher, session, LONG_TEXT, chat_id=35, user_id=35)
+
+    # Assert
+    assert session.last_answer == "Choose a deck with /decks first."
+
+
+async def test_user_cannot_save_when_the_deck_choice_is_gone(
+    dispatcher: Dispatcher, selected_decks: FakeSelectedDeckStore
+) -> None:
+    """A choice lost between preview and Save is reported, not replaced with a guess."""
+    # Arrange
+    session = RecordingSession()
+    await send_snippet(dispatcher, session, LONG_TEXT, chat_id=36, user_id=36)
+    selected_decks.decks.pop(36)
+
+    # Act
+    await tap_action(dispatcher, session, "save", chat_id=36, user_id=36)
+
+    # Assert
+    assert session.last_edit == "Choose a deck with /decks first."

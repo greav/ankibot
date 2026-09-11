@@ -15,7 +15,7 @@ FRONT_BACK_FIELD_COUNT = 2
 
 @dataclass(frozen=True, kw_only=True)
 class AddTarget:
-    """Where AnkiWeb would currently add a note — whatever the editor reports as current."""
+    """Where a note goes: the chosen deck, with whatever notetype the editor reports as current."""
 
     deck_id: int
     notetype_id: int
@@ -27,8 +27,8 @@ class CardGateway(Protocol):
     """Adds a note to a deck of the AnkiWeb account, with the current notetype."""
 
     @abstractmethod
-    async def add_target(self, deck_id: int | None) -> AddTarget:
-        """Return the target for ``deck_id``, or AnkiWeb's current deck when it is None.
+    async def add_target(self, deck_id: int) -> AddTarget:
+        """Return the target for ``deck_id``.
 
         Raises ``AnkiDeckNotFoundError`` when the account no longer has ``deck_id``, and
         ``AnkiSessionExpiredError``/``AnkiCardCreationError`` as any other AnkiWeb read does.

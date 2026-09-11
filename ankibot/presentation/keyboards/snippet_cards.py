@@ -26,7 +26,7 @@ class SnippetCardCallback(CallbackData, prefix="snipcard"):
     ``index`` matters only for ``toggle``; ``-1`` keeps the payload short for the other actions.
     """
 
-    action: Literal["toggle", "save", "regenerate", "cancel"]
+    action: Literal["toggle", "save", "regenerate", "feedback", "cancel"]
     index: int = -1
 
 
@@ -44,7 +44,10 @@ def regenerate_label(selection: Sequence[bool]) -> str:
 
 
 def snippet_cards_keyboard(selection: Sequence[bool]) -> InlineKeyboardMarkup:
-    """Numbered toggles matching the preview's numbering, then Save / Regenerate (each with a count) / Cancel."""
+    """Numbered toggles matching the preview's numbering, then Save / Cancel, then the two Regenerates.
+
+    Both Regenerates replace the unticked cards; the second first asks what to change about them.
+    """
     toggles = [
         InlineKeyboardButton(
             text=f"{SELECTED_MARK if chosen else UNSELECTED_MARK} {index + 1}",
@@ -61,10 +64,17 @@ def snippet_cards_keyboard(selection: Sequence[bool]) -> InlineKeyboardMarkup:
                 text=f"Save {chosen_count} of {len(selection)}",
                 callback_data=SnippetCardCallback(action="save").pack(),
             ),
+            InlineKeyboardButton(text="Cancel", callback_data=SnippetCardCallback(action="cancel").pack()),
+        ]
+    )
+    rows.append(
+        [
             InlineKeyboardButton(
                 text=regenerate_label(selection), callback_data=SnippetCardCallback(action="regenerate").pack()
             ),
-            InlineKeyboardButton(text="Cancel", callback_data=SnippetCardCallback(action="cancel").pack()),
+            InlineKeyboardButton(
+                text="Regenerate with feedback", callback_data=SnippetCardCallback(action="feedback").pack()
+            ),
         ]
     )
     return InlineKeyboardMarkup(inline_keyboard=rows)

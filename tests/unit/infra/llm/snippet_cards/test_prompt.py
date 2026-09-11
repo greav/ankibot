@@ -38,6 +38,18 @@ def test_user_content_can_list_the_kept_cards_after_the_text() -> None:
     )
 
 
+def test_user_content_can_end_with_the_feedback() -> None:
+    """The learner's note on what to change comes last, after the kept cards it is about."""
+    # Act
+    result = build_user_content(Snippet(text="The GIL serializes bytecode."), KEPT, "shorter backs")
+
+    # Assert
+    assert isinstance(result, str)
+    assert result.endswith(
+        "- Q2 — A2\n\nThe learner asked to change this about the cards being replaced: shorter backs"
+    )
+
+
 def test_user_content_can_list_the_kept_cards_alongside_a_screenshot() -> None:
     """With an image snippet the kept cards travel as a text part before the image."""
     # Arrange

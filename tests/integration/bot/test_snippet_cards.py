@@ -14,7 +14,7 @@ from aiogram.types import Update
 from ankibot.application.add_snippet_cards import DraftCard
 from ankibot.application.exceptions.anki import AnkiSessionExpiredError
 from ankibot.application.exceptions.generation import CardGenerationUnavailableError
-from ankibot.presentation.handlers.snippet_cards import NOTHING_SELECTED
+from ankibot.presentation.handlers.snippet_cards import ASK_FEEDBACK, NOT_FEEDBACK, NOTHING_SELECTED
 from ankibot.presentation.keyboards.snippet_cards import SnippetCardCallback
 from tests.common.fakes.card_gateway import FakeCardGateway
 from tests.common.fakes.snippet_cards_generator import FakeSnippetCardsGenerator
@@ -86,7 +86,7 @@ async def send_photo(
 async def tap_action(
     dispatcher: Dispatcher,
     session: RecordingSession,
-    action: Literal["toggle", "save", "regenerate", "cancel"],
+    action: Literal["toggle", "save", "regenerate", "feedback", "cancel"],
     *,
     chat_id: int,
     user_id: int,
@@ -521,3 +521,70 @@ async def test_user_can_see_partial_save_counted_against_the_selection(
     assert session.last_edit == (
         "Saved 1 of 2 cards to Default, then AnkiWeb failed. Resend the snippet to add the rest."
     )
+
+
+async def test_user_can_regenerate_with_feedback(
+    dispatcher: Dispatcher, snippet_cards_generator: FakeSnippetCardsGenerator
+) -> None:
+    """'Regenerate with feedback' asks for a note, and the note regenerates the unticked cards."""
+    # Arrange
+    session = RecordingSession()
+    await send_snippet(dispatcher, session, LONG_TEXT, chat_id=27, user_id=27)
+    await tap_action(dispatcher, session, "toggle", index=1, chat_id=27, user_id=27)
+    snippet_cards_generator.cards = [DraftCard(front="What is the GIL for?", back="Memory safety")]
+
+    # Act
+    await tap_action(dispatcher, session, "feedback", chat_id=27, user_id=27)
+    asked = session.last_answer
+    await send_snippet(dispatcher, session, "shorter backs", chat_id=27, user_id=27, preview_message_id=307)
+
+    # Assert
+    assert asked == ASK_FEEDBACK
+    assert session.last_answer == (
+        "Add 2 cards to Default?\n\n"
+        "1. What does GIL stand for?\n— Global Interpreter Lock\n\n"
+        "2. What is the GIL for?\n— Memory safety"
+    )
+
+
+async def test_user_can_still_use_the_preview_buttons_while_asked_for_feedback(dispatcher: Dispatcher) -> None:
+    """The question is not a trap: Save on the preview still works instead of being read as a note."""
+    # Arrange
+    session = RecordingSession()
+    await send_snippet(dispatcher, session, LONG_TEXT, chat_id=28, user_id=28)
+    await tap_action(dispatcher, session, "feedback", chat_id=28, user_id=28)
+
+    # Act
+    await tap_action(dispatcher, session, "save", chat_id=28, user_id=28)
+
+    # Assert
+    assert session.last_edit == "Added 2 cards to Default."
+
+
+async def test_user_cannot_send_a_blank_note_as_feedback(dispatcher: Dispatcher) -> None:
+    """Whitespace in place of a note is re-asked, not sent to the generator or read as a snippet."""
+    # Arrange
+    session = RecordingSession()
+    await send_snippet(dispatcher, session, LONG_TEXT, chat_id=29, user_id=29)
+    await tap_action(dispatcher, session, "feedback", chat_id=29, user_id=29)
+
+    # Act
+    await send(dispatcher, session, "   ", chat_id=29, user_id=29)
+
+    # Assert
+    assert session.last_answer == NOT_FEEDBACK
+
+
+async def test_user_can_give_feedback_on_a_photo_snippet(dispatcher: Dispatcher) -> None:
+    """Feedback on a screenshot preview re-downloads the image by file_id, like Regenerate does."""
+    # Arrange
+    session = RecordingSession()
+    await send_photo(dispatcher, session, chat_id=30, user_id=30)
+    await tap_action(dispatcher, session, "feedback", chat_id=30, user_id=30)
+    queue_file_download(session, b"fake-jpeg-bytes")
+
+    # Act
+    await send_snippet(dispatcher, session, "focus on locks", chat_id=30, user_id=30, preview_message_id=308)
+
+    # Assert
+    assert session.answers.count(EXPECTED_PREVIEW) == 2

@@ -45,11 +45,14 @@ class SnippetCardsGenerator(Protocol):
     """Distills a passage into front/back flashcards."""
 
     @abstractmethod
-    async def generate(self, snippet: Snippet, kept: Sequence[DraftCard] = ()) -> Sequence[DraftCard]:
+    async def generate(
+        self, snippet: Snippet, *, kept: Sequence[DraftCard] = (), feedback: str | None = None
+    ) -> Sequence[DraftCard]:
         """Return the cards worth keeping from ``snippet``, possibly none.
 
         ``kept`` are cards the learner has already accepted from this same passage: the answer
-        covers other facts and leaves room for them under the generator's own cap.
+        covers other facts and leaves room for them under the generator's own cap. ``feedback``
+        is the learner's note on what to change about the cards being replaced.
 
         Raises ``CardGenerationUnavailableError`` when the backend cannot be reached, and
         ``CardGenerationError`` when its answer cannot be read.
@@ -69,11 +72,13 @@ def merge_cards(kept: Sequence[DraftCard], generated: Sequence[DraftCard]) -> tu
 
 @dataclass(frozen=True, kw_only=True)
 class GenerateSnippetCardsRequest:
-    """``kept`` is what the learner accepted from a previous batch of the same snippet, to carry over."""
+    """A regeneration carries ``kept``, what the learner accepted from the previous batch, and
+    optionally ``feedback``, their note on what to change about the rest."""
 
     user_id: int
     snippet: Snippet
     kept: tuple[DraftCard, ...] = ()
+    feedback: str | None = None
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -99,7 +104,7 @@ class GenerateCards:
         target = await self._gateway.add_target(deck_id)
         ensure_front_back(target)
 
-        generated = await self._generator.generate(request.snippet, request.kept)
+        generated = await self._generator.generate(request.snippet, kept=request.kept, feedback=request.feedback)
         if blanks := blank_sided(generated):
             raise CardGenerationError(f"The generator left card(s) {', '.join(map(str, blanks))} one-sided")
 

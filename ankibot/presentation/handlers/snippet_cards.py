@@ -4,7 +4,9 @@ A snippet enters two ways: implicitly — text longer than a word lookup, or an 
 explicitly through /snippet, whose waiting state takes text of any length. The generated cards sit
 under one keyboard on the last preview message: a numbered toggle per card, all selected at first,
 and Save / Regenerate / Cancel acting on the selection. Regenerate replaces the unticked cards and
-keeps the ticked ones — or, with nothing unticked, replaces the whole batch.
+keeps the ticked ones — or, with nothing unticked, replaces the whole batch. "Regenerate with
+feedback" does the same after asking what to change; the preview keyboard stays live meanwhile,
+so any of its buttons is the way out of that question.
 """
 
 import contextlib
@@ -66,12 +68,15 @@ UNSUPPORTED_NOTETYPE = (
 )
 GENERIC_FAILURE = "Failed to add the cards to AnkiWeb. Please try again later."
 NOTHING_SELECTED = "Select at least one card."
+ASK_FEEDBACK = "What should change in the regenerated cards? Send a note, or use the buttons above."
+NOT_FEEDBACK = "That doesn't look like a note. Say what should change, or use the buttons above."
 CANCELLED = "Cancelled."
 
 
 class SnippetCards(StatesGroup):
     waiting_for_snippet = State()
     confirming = State()
+    waiting_for_feedback = State()
 
 
 def format_cards_preview(deck_name: str, cards: Sequence[DraftCard]) -> list[str]:
@@ -128,6 +133,33 @@ async def _download_image(bot: Bot, file_id: str, mime_type: str) -> SnippetImag
     return SnippetImage(data=buffer.read(), mime_type=mime_type)
 
 
+def _source_of(data: dict[str, object]) -> dict[str, str | None]:
+    """The snippet's source as ``_send_preview`` stored it, for a regeneration to carry forward."""
+    return {
+        key: value if isinstance(value := data.get(key), str) else None
+        for key in ("text", "file_id", "mime_type", "hint")
+    }
+
+
+async def _restore_snippet(bot: Bot | None, source: dict[str, str | None]) -> Snippet | None:
+    """Rebuild the snippet from its stored source — re-downloading an image by its file_id.
+
+    None when the image can no longer be fetched; a text snippet always restores.
+    """
+    hint = source["hint"]
+    text = source["text"]
+    if text is not None:
+        return Snippet(text=text, hint=hint)
+    file_id = source["file_id"]
+    mime_type = source["mime_type"]
+    if file_id is None or mime_type is None or bot is None:
+        return None
+    image = await _download_image(bot, file_id, mime_type)
+    if image is None:
+        return None
+    return Snippet(image=image, hint=hint)
+
+
 async def _send_preview(
     message: Message,
     state: FSMContext,
@@ -136,19 +168,22 @@ async def _send_preview(
     snippet: Snippet,
     source: dict[str, str | None],
     kept: tuple[DraftCard, ...] = (),
+    feedback: str | None = None,
 ) -> None:
     """Generate cards for ``snippet`` and reply with their preview, or with the failure that stopped it.
 
     ``source`` is what Regenerate rebuilds the snippet from — its text, or its image's ``file_id``
     to re-download; the bytes themselves never enter FSM data. ``kept`` are the cards Regenerate
-    carries over from the previous batch.
+    carries over from the previous batch, ``feedback`` the learner's note on what to change.
     """
     bot = message.bot
     if bot is not None:
         await bot.send_chat_action(chat_id=message.chat.id, action="typing")
 
     try:
-        result = await generate_cards.execute(GenerateSnippetCardsRequest(user_id=user_id, snippet=snippet, kept=kept))
+        result = await generate_cards.execute(
+            GenerateSnippetCardsRequest(user_id=user_id, snippet=snippet, kept=kept, feedback=feedback)
+        )
     except CardGenerationUnavailableError:
         await state.clear()
         await message.answer(GENERATOR_UNAVAILABLE)
@@ -259,8 +294,32 @@ async def awaited_snippet_handler(
     await _send_preview(message, state, generate_cards, user_id, Snippet(text=text), source)
 
 
+@router.message(SnippetCards.waiting_for_feedback, F.text, ~F.text.startswith("/"))
+async def feedback_text_handler(
+    message: Message,
+    state: FSMContext,
+    generate_cards: FromDishka[GenerateCards],
+    user_id: FromDishka[TelegramUserId],
+) -> None:
+    """The note "Regenerate with feedback" asked for: regenerate the unticked cards with it."""
+    feedback = plain_text(message.text)
+    if feedback is None:
+        await message.answer(NOT_FEEDBACK)
+        return
+    data = await state.get_data()
+    kept = kept_cards(data.get("cards", []), data.get("selected", []))
+    source = _source_of(data)
+    snippet = await _restore_snippet(message.bot, source)
+    if snippet is None:
+        await state.clear()
+        await message.answer(IMAGE_UNREADABLE)
+        return
+    await _clear_previous_keyboard(message, state)
+    await _send_preview(message, state, generate_cards, user_id, snippet, source, kept, feedback)
+
+
 @router.message(
-    StateFilter(None, SnippetCards.waiting_for_snippet, SnippetCards.confirming),
+    StateFilter(None, SnippetCards.waiting_for_snippet, SnippetCards.confirming, SnippetCards.waiting_for_feedback),
     F.photo,
 )
 async def snippet_photo_handler(
@@ -277,7 +336,7 @@ async def snippet_photo_handler(
 
 
 @router.message(
-    StateFilter(None, SnippetCards.waiting_for_snippet, SnippetCards.confirming),
+    StateFilter(None, SnippetCards.waiting_for_snippet, SnippetCards.confirming, SnippetCards.waiting_for_feedback),
     F.document.mime_type.startswith("image/"),
 )
 async def snippet_document_handler(
@@ -294,7 +353,9 @@ async def snippet_document_handler(
     )
 
 
-@router.callback_query(SnippetCardCallback.filter(), SnippetCards.confirming)
+@router.callback_query(
+    SnippetCardCallback.filter(), StateFilter(SnippetCards.confirming, SnippetCards.waiting_for_feedback)
+)
 async def snippet_cards_action_handler(
     callback: CallbackQuery,
     callback_data: SnippetCardCallback,
@@ -309,6 +370,8 @@ async def snippet_cards_action_handler(
         await edit_into(callback, CANCELLED)
     elif callback_data.action == "regenerate":
         await _regenerate(callback, state, generate_cards, user_id)
+    elif callback_data.action == "feedback":
+        await _ask_feedback(callback, state)
     elif callback_data.action == "toggle":
         await _toggle(callback, callback_data.index, state)
     else:
@@ -350,6 +413,17 @@ def kept_cards(stored: Sequence[dict[str, str]], selected: Sequence[bool]) -> tu
     )
 
 
+async def _ask_feedback(callback: CallbackQuery, state: FSMContext) -> None:
+    """Ask what to change; the answer arrives as text in the waiting_for_feedback state."""
+    if not isinstance(callback.message, Message):
+        return
+    data = await state.get_data()
+    if not _is_current_preview(callback, data):
+        return
+    await state.set_state(SnippetCards.waiting_for_feedback)
+    await callback.message.answer(ASK_FEEDBACK)
+
+
 async def _regenerate(
     callback: CallbackQuery, state: FSMContext, generate_cards: GenerateCards, user_id: TelegramUserId
 ) -> None:
@@ -360,29 +434,16 @@ async def _regenerate(
     if not isinstance(callback.message, Message):
         return
     message = callback.message
-    bot = message.bot
     data = await state.get_data()
     if not _is_current_preview(callback, data):
         return
     kept = kept_cards(data.get("cards", []), data.get("selected", []))
-    hint: str | None = data.get("hint")
-    text: str | None = data.get("text")
-
-    if text is not None:
-        snippet = Snippet(text=text, hint=hint)
-        source: dict[str, str | None] = {"text": text, "file_id": None, "mime_type": None, "hint": hint}
-    else:
-        file_id: str | None = data.get("file_id")
-        mime_type: str | None = data.get("mime_type")
-        if file_id is None or mime_type is None or bot is None:
-            return
-        image = await _download_image(bot, file_id, mime_type)
-        if image is None:
-            await state.clear()
-            await edit_into(callback, IMAGE_UNREADABLE)
-            return
-        snippet = Snippet(image=image, hint=hint)
-        source = {"text": None, "file_id": file_id, "mime_type": mime_type, "hint": hint}
+    source = _source_of(data)
+    snippet = await _restore_snippet(message.bot, source)
+    if snippet is None:
+        await state.clear()
+        await edit_into(callback, IMAGE_UNREADABLE)
+        return
 
     await message.edit_reply_markup(reply_markup=None)
     await _send_preview(message, state, generate_cards, user_id, snippet, source, kept)

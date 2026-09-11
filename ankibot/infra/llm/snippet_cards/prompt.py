@@ -37,16 +37,26 @@ def kept_cards_note(kept: Sequence[DraftCard]) -> str:
     return f"The learner already kept these cards from this passage. Do not repeat them; cover other facts:\n{listed}"
 
 
-def build_user_content(snippet: Snippet, kept: Sequence[DraftCard] = ()) -> str | list[ChatCompletionContentPartParam]:
+def feedback_note(feedback: str) -> str:
+    """The learner's note on what to change, framed as being about the cards being replaced."""
+    return f"The learner asked to change this about the cards being replaced: {feedback}"
+
+
+def build_user_content(
+    snippet: Snippet, kept: Sequence[DraftCard] = (), feedback: str | None = None
+) -> str | list[ChatCompletionContentPartParam]:
     """The user-turn content: the passage's text, or its screenshot as an image part.
 
-    The hint, and then the kept cards when there are any, follow the passage as further instructions.
+    The hint, the kept cards and the feedback, whichever are present, follow the passage as
+    further instructions in that order.
     """
     notes = []
     if snippet.hint is not None:
         notes.append(f"Focus on: {snippet.hint}")
     if kept:
         notes.append(kept_cards_note(kept))
+    if feedback is not None:
+        notes.append(feedback_note(feedback))
 
     if snippet.text is not None:
         return "\n\n".join([snippet.text, *notes])

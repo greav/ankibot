@@ -101,13 +101,14 @@ async def test_generator_can_leave_room_for_the_kept_cards_under_the_cap() -> No
 
     # Act
     async with client:
-        result = await generator.generate(TEXT_SNIPPET, kept)
+        result = await generator.generate(TEXT_SNIPPET, kept=kept, feedback="shorter backs")
 
     # Assert
     assert result == (DraftCard(front="Q3", back="A3"), DraftCard(front="Q4", back="A4"))
     sent = json.loads(requests[0].content)
     assert "at most 2" in sent["messages"][0]["content"]
-    assert sent["messages"][1]["content"].endswith("- Q1 — A1\n- Q2 — A2")
+    assert "- Q1 — A1\n- Q2 — A2" in sent["messages"][1]["content"]
+    assert sent["messages"][1]["content"].endswith("shorter backs")
 
 
 async def test_generator_can_send_a_screenshot_as_an_image_part() -> None:

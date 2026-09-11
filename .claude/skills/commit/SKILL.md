@@ -172,5 +172,7 @@ one coherent change touching twelve files is still one commit.
 
 ## 7. Confirm
 
-Print the final subject + body and the file list, then commit. Afterwards report
-`git log -1 --stat` briefly. Don't push unless asked.
+Print the final subject + body and the file list, then commit. Afterwards show the user the
+output of `git show --name-status --format='%h %s'` — hash, subject and one `A`/`M`/`D` line
+per file, matching the codes of step 3. The body stays out: it was printed just before the
+commit, and `--stat`'s line counts say only how much changed. Don't push unless asked.

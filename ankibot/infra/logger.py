@@ -35,4 +35,7 @@ def configure_root_logger(config: LoggerConfig) -> logging.Logger:
     root_logger = logging.getLogger()
     root_logger.addHandler(stream_handler)
     root_logger.setLevel(LOG_LEVELS.get(config.level, logging.WARNING))
+    # httpx logs every request's full URL at INFO, and AnkiWeb's token exchange carries the login
+    # ticket in a query parameter. The adapters report their own outcomes, so nothing is lost.
+    logging.getLogger("httpx").setLevel(logging.WARNING)
     return root_logger

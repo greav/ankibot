@@ -2,6 +2,7 @@ import logging
 
 import pytest
 
+from ankibot.application.add_vocabulary_word import CardFeedback
 from ankibot.domain.card_template import CardTemplate
 from ankibot.infra.llm.vocabulary_card.prompt import build_user_prompt, response_schema
 
@@ -99,3 +100,19 @@ def test_build_user_prompt_can_carry_the_word() -> None:
 
     # Assert
     assert "serendipity" in prompt
+
+
+def test_build_user_prompt_can_carry_the_previous_card_and_the_note_on_it() -> None:
+    """A redo shows the model the card the learner saw, field by field, and their note last."""
+    # Arrange
+    template = CardTemplate(name="English Words V2", fields=("Word", "Meaning"))
+    feedback = CardFeedback(note="simpler meaning", previous={"Word": "serendipity", "Meaning": "a fortunate chance"})
+
+    # Act
+    prompt = build_user_prompt("serendipity", template, feedback)
+
+    # Assert
+    assert prompt.endswith(
+        "The learner was shown this card:\nWord: serendipity\nMeaning: a fortunate chance\n"
+        "The learner asked to change this about it: simpler meaning"
+    )

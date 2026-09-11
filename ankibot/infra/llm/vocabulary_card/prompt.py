@@ -1,6 +1,7 @@
 import logging
 from typing import Any
 
+from ankibot.application.add_vocabulary_word import CardFeedback
 from ankibot.domain.card_template import CardTemplate
 
 logger = logging.getLogger(__name__)
@@ -12,10 +13,21 @@ SYSTEM_PROMPT = (
 )
 
 
-def build_user_prompt(word: str, template: CardTemplate) -> str:
-    """The user-turn prompt asking the model to fill ``template``'s fields for ``word``."""
+def build_user_prompt(word: str, template: CardTemplate, feedback: CardFeedback | None = None) -> str:
+    """The user-turn prompt asking the model to fill ``template``'s fields for ``word``.
+
+    With ``feedback``, the card the learner was shown and their note on it follow the request, so
+    the redo is about that card rather than a fresh guess.
+    """
     fields = ", ".join(template.fields)
-    return f'Fill the fields ({fields}) of a flashcard for the English word "{word}".'
+    request = f'Fill the fields ({fields}) of a flashcard for the English word "{word}".'
+    if feedback is None:
+        return request
+    previous = "\n".join(f"{name}: {value}" for name, value in feedback.previous.items())
+    return (
+        f"{request}\n\nThe learner was shown this card:\n{previous}\n"
+        f"The learner asked to change this about it: {feedback.note}"
+    )
 
 
 # What each field is for. A discovered field with no entry is described by its name alone.

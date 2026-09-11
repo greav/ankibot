@@ -96,7 +96,7 @@ async def deck_chosen_handler(
         select_deck,
         lambda name: f"Deck: {name}. Send the front side.",
     )
-    if chosen:
+    if chosen is not None:
         await state.set_state(AddCard.waiting_for_front)
     else:
         await state.clear()

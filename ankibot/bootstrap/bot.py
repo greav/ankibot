@@ -31,13 +31,14 @@ def create_dispatcher(container: AsyncContainer, access: AccessConfig) -> Dispat
 
     dp.include_router(start.router)
     dp.include_router(authenticate.router)
-    # add_card's deck callback is state-filtered, so it wins while the user is mid-/addcard and
-    # every other deck callback falls through to decks.router.
-    dp.include_router(add_card.router)
-    dp.include_router(decks.router)
-    # snippet_cards claims long text, photos and image documents; it must come before
+    # add_card's and snippet_cards' deck callbacks are state-filtered, so each wins while its own
+    # dialog is choosing a deck and every other deck callback falls through to decks.router.
+    # snippet_cards can sit above decks because none of its message handlers takes a command:
+    # /decks still reaches its router from any snippet state. It must also come before
     # vocabulary_card, whose catch-all would otherwise consume every plain-text message first.
+    dp.include_router(add_card.router)
     dp.include_router(snippet_cards.router)
+    dp.include_router(decks.router)
     # vocabulary_card's catch-all message handler must come after every command-specific router,
     # or it would swallow /decks paging callbacks and any future command's plain-text steps.
     dp.include_router(vocabulary_card.router)

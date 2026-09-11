@@ -25,7 +25,10 @@ def test_every_action_stays_within_telegrams_callback_data_limit() -> None:
     # Arrange / Act
     packed = [
         SnippetCardCallback(action="toggle", index=MAX_CARDS - 1).pack(),
-        *(SnippetCardCallback(action=action).pack() for action in ("save", "regenerate", "feedback", "cancel")),
+        *(
+            SnippetCardCallback(action=action).pack()
+            for action in ("save", "regenerate", "feedback", "cancel", "deck")
+        ),
     ]
 
     # Assert
@@ -42,6 +45,7 @@ def test_keyboard_can_mark_selected_and_unselected_cards() -> None:
         ["☑ 1", "☐ 2", "☑ 3"],
         ["Save 2 of 3", "Cancel"],
         ["Regenerate 1", "Regenerate with feedback"],
+        ["Change deck"],
     ]
 
 
@@ -53,13 +57,13 @@ def test_regenerate_label_can_say_it_replaces_the_whole_batch() -> None:
 
 
 def test_keyboard_cannot_put_more_than_four_toggles_in_a_row() -> None:
-    """A full batch of eight wraps into two rows of four, the action row still last."""
+    """A full batch of eight wraps into two rows of four, the action rows still last."""
     # Act
     rows = button_texts([True] * MAX_CARDS)
 
     # Assert
-    assert [len(row) for row in rows[:-2]] == [TOGGLES_PER_ROW, TOGGLES_PER_ROW]
-    assert rows[-2:] == [["Save 8 of 8", "Cancel"], ["Regenerate", "Regenerate with feedback"]]
+    assert [len(row) for row in rows[:-3]] == [TOGGLES_PER_ROW, TOGGLES_PER_ROW]
+    assert rows[-3:] == [["Save 8 of 8", "Cancel"], ["Regenerate", "Regenerate with feedback"], ["Change deck"]]
 
 
 def test_toggled_can_flip_one_card() -> None:

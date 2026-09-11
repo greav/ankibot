@@ -1,4 +1,4 @@
-"""The snippet-cards confirmation keyboard: a toggle per generated card, then the action row.
+"""The snippet-cards confirmation keyboard: a toggle per generated card, then the action rows.
 
 Separate from ``keyboards/generated_card.py``, which /word uses for a single card and needs no
 selection. Router-free like ``keyboards/decks.py``.
@@ -21,12 +21,12 @@ UNSELECTED_MARK = "☐"
 
 
 class SnippetCardCallback(CallbackData, prefix="snipcard"):
-    """Toggles one card of the pending preview, or acts on the whole selection.
+    """Toggles one card of the pending preview, acts on the whole selection, or opens the deck picker.
 
     ``index`` matters only for ``toggle``; ``-1`` keeps the payload short for the other actions.
     """
 
-    action: Literal["toggle", "save", "regenerate", "feedback", "cancel"]
+    action: Literal["toggle", "save", "regenerate", "feedback", "cancel", "deck"]
     index: int = -1
 
 
@@ -44,9 +44,10 @@ def regenerate_label(selection: Sequence[bool]) -> str:
 
 
 def snippet_cards_keyboard(selection: Sequence[bool]) -> InlineKeyboardMarkup:
-    """Numbered toggles matching the preview's numbering, then Save / Cancel, then the two Regenerates.
+    """Numbered toggles matching the preview's numbering, then Save / Cancel, the two Regenerates, and Change deck.
 
     Both Regenerates replace the unticked cards; the second first asks what to change about them.
+    Change deck opens the /decks picker, so the batch can be redirected before it is saved.
     """
     toggles = [
         InlineKeyboardButton(
@@ -77,4 +78,5 @@ def snippet_cards_keyboard(selection: Sequence[bool]) -> InlineKeyboardMarkup:
             ),
         ]
     )
+    rows.append([InlineKeyboardButton(text="Change deck", callback_data=SnippetCardCallback(action="deck").pack())])
     return InlineKeyboardMarkup(inline_keyboard=rows)

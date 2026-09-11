@@ -49,12 +49,13 @@ async def select_tapped_deck(
     deck_id: int,
     select_deck: SelectDeck,
     confirmation: Callable[[str], str],
-) -> bool:
-    """Store the tapped deck and edit the picker into its outcome; True when the deck was stored.
+) -> str | None:
+    """Store the tapped deck and edit the picker into its outcome; the deck's name once it is stored.
 
-    ``/addcard`` needs the outcome to decide whether to advance its FSM; ``/decks`` ignores it.
+    ``/addcard`` needs the outcome to decide whether to advance its FSM, the snippet preview
+    needs the name to re-address itself; ``/decks`` ignores both.
     """
-    stored = False
+    stored: str | None = None
     try:
         result = await select_deck.execute(SelectDeckRequest(user_id=user_id, deck_id=deck_id))
     except AnkiSessionExpiredError:
@@ -66,7 +67,7 @@ async def select_tapped_deck(
         await edit_into(callback, ANKIWEB_UNREACHABLE)
     else:
         await edit_into(callback, confirmation(result.deck_name))
-        stored = True
+        stored = result.deck_name
 
     await callback.answer()
     return stored

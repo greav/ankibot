@@ -235,7 +235,7 @@ async def snippet_text_handler(
     await _send_preview(message, state, generate_cards, user_id, Snippet(text=snippet), source)
 
 
-@router.message(SnippetCards.waiting_for_snippet, F.text)
+@router.message(SnippetCards.waiting_for_snippet, F.text, ~F.text.startswith("/"))
 async def awaited_snippet_handler(
     message: Message,
     state: FSMContext,
@@ -243,6 +243,7 @@ async def awaited_snippet_handler(
     user_id: FromDishka[TelegramUserId],
 ) -> None:
     # /snippet has been sent, so any usable length qualifies — this is the short passage's door.
+    # Commands are left to the routers behind, so /word can switch flows from here.
     text = plain_text(message.text)
     if text is None:
         await message.answer(NOT_A_SNIPPET)

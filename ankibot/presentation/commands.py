@@ -8,6 +8,7 @@ async def set_commands(bot: Bot) -> None:
         BotCommand(command="/auth", description="Authenticate with AnkiWeb"),
         BotCommand(command="/decks", description="Choose the deck new cards go to"),
         BotCommand(command="/addcard", description="Add a card to AnkiWeb"),
+        BotCommand(command="/word", description="Look up a word and make a vocabulary card"),
         BotCommand(command="/snippet", description="Make cards from a text snippet or screenshot"),
         BotCommand(command="/cancel", description="Cancel the current action"),
     ]

@@ -136,6 +136,12 @@ extra secret. There is nothing to configure under Settings → Secrets.
 - **Logs** — `docker compose -p ankibot logs -f` from any user in the `docker` group
   (rotated at 3 × 10 MB). Deploy runs: `journalctl -u ankibot-deploy -f`.
 
+- **State** — `/opt/ankibot/data/` is the bot's persistent state (today: each user's
+  `/decks` choice in `selected_decks.json`), bind-mounted into the container by
+  `compose.yaml`. Docker creates the directory on first start. Besides `.env`, it is the
+  one thing on the host worth keeping across a reinstall; a corrupt file there stops the
+  bot on launch rather than sending cards to the wrong deck.
+
 - **Config change** — commit to `configs/config.yaml` (or `deploy/compose.yaml`) and push
   to `master`; both deploy like any code change. Only `.env` values are changed on the
   server: edit the file, then `docker compose -p ankibot up -d --force-recreate`.

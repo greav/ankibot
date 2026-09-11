@@ -26,6 +26,11 @@ anki_vocabulary_cards:
   deck_name: "English Words V2"
   notetype_name: "English Words Context" # the NOTETYPE's name; not always the deck's
 
+selected_decks:
+  # Where each user's /decks choice is kept between restarts. Relative to the working
+  # directory: data/ in the repo locally, /opt/data in the container (see deploy/compose.yaml).
+  path: data/selected_decks.json
+
 card_generator:
   provider: openai # the only adapter today; an anthropic branch slots in beside it
 

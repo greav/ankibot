@@ -37,4 +37,4 @@ build_image:
 	docker build -t ankibot .
 
 run_container:
-	docker run -v ${PWD}/configs/:/opt/configs --env-file .env ankibot
+	docker run -v ${PWD}/configs/:/opt/configs -v ${PWD}/data:/opt/data --env-file .env ankibot

@@ -680,3 +680,34 @@ async def test_user_cannot_change_to_a_deck_that_no_longer_exists(dispatcher: Di
         "That deck no longer exists in AnkiWeb. Run /decks again.",
         "Added 2 cards to Default.",
     ]
+
+
+async def test_user_cannot_generate_cards_without_choosing_a_deck(
+    dispatcher: Dispatcher, selected_decks: FakeSelectedDeckStore
+) -> None:
+    """With no deck chosen the snippet is refused up front, never generated into AnkiWeb's current deck."""
+    # Arrange
+    selected_decks.decks.pop(35)
+    session = RecordingSession()
+
+    # Act
+    await send(dispatcher, session, LONG_TEXT, chat_id=35, user_id=35)
+
+    # Assert
+    assert session.last_answer == "Choose a deck with /decks first."
+
+
+async def test_user_cannot_save_when_the_deck_choice_is_gone(
+    dispatcher: Dispatcher, selected_decks: FakeSelectedDeckStore
+) -> None:
+    """A choice lost between preview and Save is reported, not replaced with a guess."""
+    # Arrange
+    session = RecordingSession()
+    await send_snippet(dispatcher, session, LONG_TEXT, chat_id=36, user_id=36)
+    selected_decks.decks.pop(36)
+
+    # Act
+    await tap_action(dispatcher, session, "save", chat_id=36, user_id=36)
+
+    # Assert
+    assert session.last_edit == "Choose a deck with /decks first."

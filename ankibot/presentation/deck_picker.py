@@ -21,6 +21,7 @@ CHOOSE_A_DECK = "Choose a deck:"
 NO_DECKS = "You have no decks in AnkiWeb yet."
 AUTH_FIRST = "Run /auth first."
 DECK_GONE = "That deck no longer exists in AnkiWeb. Run /decks again."
+CHOOSE_DECK_FIRST = "Choose a deck with /decks first."
 ANKIWEB_UNREACHABLE = "Failed to reach AnkiWeb. Please try again later."
 
 

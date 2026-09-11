@@ -138,6 +138,7 @@ async def test_user_cannot_select_a_deck_that_no_longer_exists(
 ) -> None:
     """A deck deleted since the keyboard was rendered is refused instead of silently remembered."""
     # Arrange
+    selected_decks.decks.pop(USER_ID)
     session = RecordingSession()
 
     # Act
@@ -159,6 +160,7 @@ async def test_user_cannot_use_a_command_from_a_chat_that_hides_who_they_are(
     only the errors router can answer — which is the guarantee no unit test reaches.
     """
     # Arrange — a channel post and an anonymous group admin both arrive without a ``from_user``.
+    choices_before = dict(selected_decks.decks)
     session = RecordingSession()
     bot = make_bot(session)
     update = Update(update_id=1, message=make_message(bot, text="/decks", chat_id=CHAT_ID, user_id=None))
@@ -171,4 +173,4 @@ async def test_user_cannot_use_a_command_from_a_chat_that_hides_who_they_are(
         session.last_answer
         == "I can't tell who you are here. Send the command from your own account in a private chat."
     )
-    assert selected_decks.decks == {}
+    assert selected_decks.decks == choices_before

@@ -19,7 +19,7 @@ def make_store(path: Path) -> JsonFileSelectedDeckStore:
 
 
 async def test_user_cannot_see_a_deck_they_never_picked(tmp_path: Path) -> None:
-    """With no file yet, an unknown user has no selection, so the bot falls back to AnkiWeb's current deck."""
+    """With no file yet, an unknown user has no selection, so the bot asks them to choose one."""
     # Arrange
     store = make_store(tmp_path / "decks" / "selected_decks.json")
 

@@ -38,6 +38,7 @@ from ankibot.application.exceptions.anki import (
     SnippetCardsPartiallySavedError,
 )
 from ankibot.application.exceptions.base import ApplicationError
+from ankibot.application.exceptions.decks import NoDeckSelectedError
 from ankibot.application.exceptions.generation import (
     CardGenerationEmptyError,
     CardGenerationError,
@@ -47,6 +48,7 @@ from ankibot.application.manage_decks import ListDecks, ListDecksRequest, Select
 from ankibot.presentation.deck_picker import (
     AUTH_FIRST,
     CHOOSE_A_DECK,
+    CHOOSE_DECK_FIRST,
     DECK_GONE,
     NO_DECKS,
     deck_list_error_reply,
@@ -201,6 +203,10 @@ async def _send_preview(
     except AnkiSessionExpiredError:
         await state.clear()
         await message.answer(AUTH_FIRST)
+        return
+    except NoDeckSelectedError:
+        await state.clear()
+        await message.answer(CHOOSE_DECK_FIRST)
         return
     except AnkiDeckNotFoundError:
         await state.clear()
@@ -573,6 +579,9 @@ async def _save(
     except AnkiSessionExpiredError:
         await state.clear()
         await edit_into(callback, AUTH_FIRST)
+    except NoDeckSelectedError:
+        await state.clear()
+        await edit_into(callback, CHOOSE_DECK_FIRST)
     except AnkiDeckNotFoundError:
         await state.clear()
         await edit_into(callback, DECK_GONE)

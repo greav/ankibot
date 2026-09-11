@@ -20,7 +20,7 @@ class AnkiWebCardGateway(CardGateway):
         self._svc = svc
 
     @override
-    async def add_target(self, deck_id: int | None) -> AddTarget:
+    async def add_target(self, deck_id: int) -> AddTarget:
         info = await self._svc.post(
             "/svc/editor/get-info-for-adding",
             GetInfoForAddingRequest(),
@@ -28,21 +28,13 @@ class AnkiWebCardGateway(CardGateway):
             error=AnkiCardCreationError,
         )
 
-        if deck_id is None:
-            target_deck_id = info.current_deck_id
-            deck_name = next((deck.name for deck in info.decks if deck.id == target_deck_id), None)
-            if deck_name is None:
-                logger.warning("AnkiWeb's current deck %s matches no known deck", target_deck_id)
-                raise AnkiCardCreationError(f"AnkiWeb's current_deck_id {target_deck_id} matches no known deck")
-        else:
-            target_deck_id = deck_id
-            deck_name = next((deck.name for deck in info.decks if deck.id == deck_id), None)
-            if deck_name is None:
-                logger.warning("The selected deck %s no longer exists in AnkiWeb", deck_id)
-                raise AnkiDeckNotFoundError
+        deck_name = next((deck.name for deck in info.decks if deck.id == deck_id), None)
+        if deck_name is None:
+            logger.warning("The selected deck %s no longer exists in AnkiWeb", deck_id)
+            raise AnkiDeckNotFoundError
 
         return AddTarget(
-            deck_id=target_deck_id,
+            deck_id=deck_id,
             notetype_id=info.current_notetype_id,
             deck_name=deck_name,
             field_count=len(info.fields),

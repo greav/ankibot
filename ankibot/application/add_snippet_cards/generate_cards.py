@@ -6,7 +6,7 @@ from typing import Protocol
 
 from ankibot.application.common.card_gateway import CardGateway, ensure_front_back
 from ankibot.application.common.dto.image import Image
-from ankibot.application.common.selected_deck_store import SelectedDeckStore
+from ankibot.application.common.selected_deck_store import SelectedDeckStore, chosen_deck
 from ankibot.application.exceptions.generation import CardGenerationEmptyError, CardGenerationError
 
 logger = logging.getLogger(__name__)
@@ -96,7 +96,7 @@ class GenerateCards:
     async def execute(self, request: GenerateSnippetCardsRequest) -> GeneratedSnippetCards:
         # The target is checked before the generator runs, so a wrong deck or notetype costs
         # nothing at the LLM.
-        deck_id = await self._selected_decks.get(request.user_id)
+        deck_id = await chosen_deck(self._selected_decks, request.user_id)
         target = await self._gateway.add_target(deck_id)
         ensure_front_back(target)
 

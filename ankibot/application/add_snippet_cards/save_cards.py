@@ -3,7 +3,7 @@ from dataclasses import dataclass
 
 from ankibot.application.add_snippet_cards.generate_cards import DraftCard
 from ankibot.application.common.card_gateway import CardGateway, ensure_front_back
-from ankibot.application.common.selected_deck_store import SelectedDeckStore
+from ankibot.application.common.selected_deck_store import SelectedDeckStore, chosen_deck
 from ankibot.application.exceptions.anki import SnippetCardsPartiallySavedError
 from ankibot.application.exceptions.base import ApplicationError
 
@@ -30,7 +30,7 @@ class SaveCards:
     async def execute(self, request: SaveSnippetCardsRequest) -> SaveSnippetCardsResult:
         # Re-resolved rather than carried over from generation: the deck or notetype may have
         # changed while the preview sat unconfirmed.
-        deck_id = await self._selected_decks.get(request.user_id)
+        deck_id = await chosen_deck(self._selected_decks, request.user_id)
         target = await self._gateway.add_target(deck_id)
         ensure_front_back(target)
 

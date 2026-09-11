@@ -7,7 +7,7 @@ hand them a per-update unit of work once one exists, without this file changing.
 from dishka import Provider, Scope, provide_all
 
 from ankibot.application.add_snippet_cards import GenerateCards, SaveCards
-from ankibot.application.add_vocabulary_word import GenerateCard, SaveCard
+from ankibot.application.add_vocabulary_word import GenerateCard, SaveCard, SuggestWords
 from ankibot.application.anki_authentication import AuthenticateAnki
 from ankibot.application.manage_cards import CreateCard
 from ankibot.application.manage_decks import ListDecks, SelectDeck
@@ -25,6 +25,7 @@ class InteractorProvider(Provider):
         SelectDeck,
         GenerateCard,
         SaveCard,
+        SuggestWords,
         GenerateCards,
         SaveCards,
     )

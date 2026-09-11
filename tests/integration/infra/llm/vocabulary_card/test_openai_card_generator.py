@@ -7,6 +7,7 @@ import pytest
 from openai import AsyncOpenAI
 
 from ankibot.application.add_vocabulary_word import CardFeedback
+from ankibot.application.common.dto.image import Image
 from ankibot.application.exceptions.generation import CardGenerationError, CardGenerationUnavailableError
 from ankibot.domain.card_template import CardTemplate
 from ankibot.infra.llm.vocabulary_card.openai_card_generator import OpenAICardGenerator, OpenAICardGeneratorConfig
@@ -71,6 +72,29 @@ async def test_generator_can_ask_for_a_redo_with_the_learners_note() -> None:
     user_turn = sent["messages"][1]["content"]
     assert "Example: Hello!" in user_turn
     assert user_turn.endswith("shorter example")
+
+
+async def test_generator_can_send_the_screenshot_context_as_an_image_part() -> None:
+    """A screenshot context reaches OpenAI as an image_url part after the prompt text."""
+    # Arrange
+    requests: list[httpx2.Request] = []
+
+    async def handler(request: httpx2.Request) -> httpx2.Response:
+        requests.append(request)
+        body = chat_completion_body(content=json.dumps({"Word": "hello", "Meaning": "hi", "Example": "Hello!"}))
+        return httpx2.Response(200, json=body)
+
+    generator, client = make_generator(handler)
+
+    # Act
+    async with client:
+        await generator.generate("hello", TEMPLATE, context=Image(data=b"fake-jpeg", mime_type="image/jpeg"))
+
+    # Assert
+    parts = json.loads(requests[0].content)["messages"][1]["content"]
+    assert parts[0]["type"] == "text"
+    assert 'the English word "hello"' in parts[0]["text"]
+    assert parts[1]["image_url"]["url"].startswith("data:image/jpeg;base64,")
 
 
 async def test_generator_can_fill_a_card_with_a_strict_schema() -> None:

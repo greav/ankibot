@@ -6,7 +6,8 @@ import httpx2
 import pytest
 from openai import AsyncOpenAI
 
-from ankibot.application.add_snippet_cards import DraftCard, Snippet, SnippetImage
+from ankibot.application.add_snippet_cards import DraftCard, Snippet
+from ankibot.application.common.dto.image import Image
 from ankibot.application.exceptions.generation import CardGenerationError, CardGenerationUnavailableError
 from ankibot.infra.llm.snippet_cards.openai_snippet_cards_generator import (
     OpenAISnippetCardsGenerator,
@@ -121,7 +122,7 @@ async def test_generator_can_send_a_screenshot_as_an_image_part() -> None:
         return httpx2.Response(200, json=chat_completion_body(content=cards_content(("Q", "A"))))
 
     generator, client = make_generator(handler)
-    snippet = Snippet(image=SnippetImage(data=b"fake-jpeg", mime_type="image/jpeg"), hint="the definition")
+    snippet = Snippet(image=Image(data=b"fake-jpeg", mime_type="image/jpeg"), hint="the definition")
 
     # Act
     async with client:

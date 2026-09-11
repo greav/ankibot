@@ -14,7 +14,6 @@ from ankibot.application.add_snippet_cards.generate_cards import (
     GenerateSnippetCardsRequest,
     Snippet,
     SnippetCardsGenerator,
-    SnippetImage,
 )
 from ankibot.application.add_snippet_cards.save_cards import SaveCards, SaveSnippetCardsRequest, SaveSnippetCardsResult
 
@@ -28,5 +27,4 @@ __all__ = [
     "SaveSnippetCardsResult",
     "Snippet",
     "SnippetCardsGenerator",
-    "SnippetImage",
 ]

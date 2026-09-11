@@ -4,16 +4,9 @@ from dataclasses import dataclass
 from typing import Protocol
 
 from ankibot.application.common.card_gateway import CardGateway, ensure_front_back
+from ankibot.application.common.dto.image import Image
 from ankibot.application.common.selected_deck_store import SelectedDeckStore
 from ankibot.application.exceptions.generation import CardGenerationEmptyError, CardGenerationError
-
-
-@dataclass(frozen=True, kw_only=True)
-class SnippetImage:
-    """A screenshot of the passage, as the bytes the generator will read."""
-
-    data: bytes
-    mime_type: str
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -24,7 +17,7 @@ class Snippet:
     """
 
     text: str | None = None
-    image: SnippetImage | None = None
+    image: Image | None = None
     hint: str | None = None
 
     def __post_init__(self) -> None:

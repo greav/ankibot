@@ -7,7 +7,7 @@ from dishka import Provider, Scope, WithParents, provide
 from openai import AsyncOpenAI
 
 from ankibot.application.add_snippet_cards import SnippetCardsGenerator
-from ankibot.application.add_vocabulary_word import CardGenerator
+from ankibot.application.add_vocabulary_word import CardGenerator, WordSuggester
 from ankibot.bootstrap.config import CardGeneratorConfig
 from ankibot.infra.anki.authenticator import AnkiWebAuthenticator
 from ankibot.infra.anki.card_gateway import AnkiWebCardGateway
@@ -20,6 +20,7 @@ from ankibot.infra.llm.snippet_cards.openai_snippet_cards_generator import (
     OpenAISnippetCardsGeneratorConfig,
 )
 from ankibot.infra.llm.vocabulary_card.openai_card_generator import OpenAICardGenerator, OpenAICardGeneratorConfig
+from ankibot.infra.llm.vocabulary_card.openai_word_suggester import OpenAIWordSuggester, OpenAIWordSuggesterConfig
 from ankibot.infra.selected_decks import InMemorySelectedDeckStore
 
 # One client for every AnkiWeb call, because AnkiWeb's session lives in its cookie jar: separate
@@ -63,6 +64,18 @@ class AdapterProvider(Provider):
         match choice.provider:
             case "openai":
                 return OpenAICardGenerator(generator_config, client)
+
+    @provide
+    def word_suggester(
+        self,
+        choice: CardGeneratorConfig,
+        client: AsyncOpenAI,
+        suggester_config: OpenAIWordSuggesterConfig,
+    ) -> WordSuggester:
+        """The screenshot word suggester for the configured provider."""
+        match choice.provider:
+            case "openai":
+                return OpenAIWordSuggester(suggester_config, client)
 
     @provide
     def snippet_cards_generator(

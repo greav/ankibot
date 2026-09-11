@@ -4,10 +4,11 @@ from typing import override
 from openai import APIConnectionError, APIStatusError, APITimeoutError, AsyncOpenAI, RateLimitError
 
 from ankibot.application.add_vocabulary_word.generate_card import CardFeedback, CardGenerator
+from ankibot.application.common.dto.image import Image
 from ankibot.application.exceptions.generation import CardGenerationError, CardGenerationUnavailableError
 from ankibot.domain.card_template import CardTemplate
 from ankibot.infra.llm.vocabulary_card.parsing import parse_fields
-from ankibot.infra.llm.vocabulary_card.prompt import SYSTEM_PROMPT, build_user_prompt, response_schema
+from ankibot.infra.llm.vocabulary_card.prompt import SYSTEM_PROMPT, build_user_content, response_schema
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -18,7 +19,11 @@ class OpenAICardGeneratorConfig:
 
 
 class OpenAICardGenerator(CardGenerator):
-    """Fills a card template's fields with OpenAI's structured outputs (strict JSON schema)."""
+    """Fills a card template's fields with OpenAI's structured outputs (strict JSON schema).
+
+    A screenshot context goes to the model directly as an image part — the configured model must
+    accept image input; there is no separate OCR step.
+    """
 
     def __init__(self, config: OpenAICardGeneratorConfig, client: AsyncOpenAI) -> None:
         self._config = config
@@ -26,14 +31,19 @@ class OpenAICardGenerator(CardGenerator):
 
     @override
     async def generate(
-        self, word: str, template: CardTemplate, *, feedback: CardFeedback | None = None
+        self,
+        word: str,
+        template: CardTemplate,
+        *,
+        context: Image | None = None,
+        feedback: CardFeedback | None = None,
     ) -> dict[str, str]:
         try:
             response = await self._client.chat.completions.create(
                 model=self._config.model,
                 messages=[
                     {"role": "system", "content": SYSTEM_PROMPT},
-                    {"role": "user", "content": build_user_prompt(word, template, feedback)},
+                    {"role": "user", "content": build_user_content(word, template, context, feedback)},
                 ],
                 response_format={
                     "type": "json_schema",

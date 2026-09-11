@@ -17,6 +17,7 @@ from tests.common.fakes.ports import make_fake_container
 from tests.common.fakes.selected_deck_store import FakeSelectedDeckStore
 from tests.common.fakes.snippet_cards_generator import FakeSnippetCardsGenerator
 from tests.common.fakes.vocabulary_card_gateway import DEFAULT_TEMPLATE, FakeVocabularyCardGateway
+from tests.common.fakes.word_suggester import FakeWordSuggester
 
 # Any sender id a test picks must stay at or below this cap to pass the allowlist gate the
 # dispatcher fixture builds; ids above it belong to test_access's strangers.
@@ -25,6 +26,7 @@ MAX_ALLOWED_TEST_USER_ID = 99
 DEFAULT_DECKS = {1: "Default", 2: "Spanish"}
 DEFAULT_DECK_ID = 1
 DEFAULT_GENERATED_VALUES = {"Word": "serendipity", "Meaning": "a pleasant surprise", "Example": "What a serendipity!"}
+DEFAULT_SUGGESTED_WORDS = ["serendipity", "ubiquitous"]
 DEFAULT_SNIPPET_CARDS = [
     DraftCard(front="What does GIL stand for?", back="Global Interpreter Lock"),
     DraftCard(front="Which lock serializes Python bytecode execution?", back="The GIL"),
@@ -80,6 +82,12 @@ def card_generator() -> FakeCardGenerator:
 
 
 @pytest.fixture(scope="session")
+def word_suggester() -> FakeWordSuggester:
+    """The fake behind SuggestWords' LLM call; ``reset_word_suggester`` restores it per test."""
+    return FakeWordSuggester(words=list(DEFAULT_SUGGESTED_WORDS))
+
+
+@pytest.fixture(scope="session")
 def snippet_cards_generator() -> FakeSnippetCardsGenerator:
     """The fake behind GenerateCards' LLM call; ``reset_snippet_cards_generator`` restores it per test."""
     return FakeSnippetCardsGenerator(cards=list(DEFAULT_SNIPPET_CARDS))
@@ -93,6 +101,7 @@ async def container(
     selected_decks: FakeSelectedDeckStore,
     vocabulary_card_gateway: FakeVocabularyCardGateway,
     card_generator: FakeCardGenerator,
+    word_suggester: FakeWordSuggester,
     snippet_cards_generator: FakeSnippetCardsGenerator,
 ) -> AsyncIterator[AsyncContainer]:
     """Production's interactor graph over the fakes above, validated as strictly as production is."""
@@ -103,6 +112,7 @@ async def container(
         selected_decks=selected_decks,
         vocabulary_card_gateway=vocabulary_card_gateway,
         card_generator=card_generator,
+        word_suggester=word_suggester,
         snippet_cards_generator=snippet_cards_generator,
     )
     yield container
@@ -171,6 +181,13 @@ def reset_card_generator(card_generator: FakeCardGenerator) -> None:
     """Undo whatever the previous test asked the shared card generator to do."""
     card_generator.values = dict(DEFAULT_GENERATED_VALUES)
     card_generator.error = None
+
+
+@pytest.fixture(autouse=True)
+def reset_word_suggester(word_suggester: FakeWordSuggester) -> None:
+    """Undo whatever the previous test asked the shared word suggester to do."""
+    word_suggester.words = list(DEFAULT_SUGGESTED_WORDS)
+    word_suggester.error = None
 
 
 @pytest.fixture(autouse=True)

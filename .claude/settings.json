@@ -9,6 +9,7 @@
       "Bash(make compile_proto)",
       "Bash(make test)",
       "Bash(make export_requirements)",
+      "Bash(make run:*)",
       "Bash(git status:*)",
       "Bash(git diff:*)",
       "Bash(git log:*)",
@@ -17,7 +18,6 @@
     ],
     "ask": [
       "Bash(make record_payload:*)",
-      "Bash(make run)",
       "Bash(make build_image)",
       "Bash(make run_container)"
     ],
@@ -40,5 +40,6 @@
         ]
       }
     ]
-  }
+  },
+  "showClearContextOnPlanAccept": true
 }

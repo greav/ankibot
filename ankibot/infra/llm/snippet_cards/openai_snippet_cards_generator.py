@@ -1,3 +1,4 @@
+import logging
 from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import override
@@ -14,8 +15,11 @@ from pydantic import ValidationError
 
 from ankibot.application.add_snippet_cards import DraftCard, Snippet, SnippetCardsGenerator
 from ankibot.application.exceptions.generation import CardGenerationError, CardGenerationUnavailableError
+from ankibot.infra.llm.failures import failure_reason
 from ankibot.infra.llm.snippet_cards.parsing import CardsAnswer, to_draft_cards
 from ankibot.infra.llm.snippet_cards.prompt import build_system_prompt, build_user_content
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -43,6 +47,13 @@ class OpenAISnippetCardsGenerator(SnippetCardsGenerator):
     async def generate(
         self, snippet: Snippet, *, kept: Sequence[DraftCard] = (), feedback: str | None = None
     ) -> tuple[DraftCard, ...]:
+        try:
+            return await self._ask(snippet, kept, feedback)
+        except CardGenerationError as error:
+            logger.warning("Snippet card generation by %s failed: %s", self._config.model, failure_reason(error))
+            raise
+
+    async def _ask(self, snippet: Snippet, kept: Sequence[DraftCard], feedback: str | None) -> tuple[DraftCard, ...]:
         # The kept cards count against the cap, so the batch as a whole stays within it; the model
         # is always allowed at least one, or the call would be pointless.
         remaining = max(self._config.max_cards - len(kept), 1)

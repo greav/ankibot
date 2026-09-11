@@ -1,3 +1,4 @@
+import logging
 from abc import abstractmethod
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -7,6 +8,8 @@ from ankibot.application.add_vocabulary_word.ports import VocabularyCardGateway
 from ankibot.application.common.dto.image import Image
 from ankibot.application.exceptions.generation import CardGenerationIncompleteError
 from ankibot.domain.card_template import CardTemplate, in_template_order, missing_fields
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -68,6 +71,7 @@ class GenerateCard:
             request.word, target.template, context=request.context, feedback=request.feedback
         )
         if missing := missing_fields(target.template, values):
+            logger.warning("Vocabulary card left incomplete: %s empty", ", ".join(missing))
             raise CardGenerationIncompleteError(f"The generator left {', '.join(missing)} empty")
         return GeneratedCard(
             deck_name=target.deck_name,

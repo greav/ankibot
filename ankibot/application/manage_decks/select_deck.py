@@ -1,3 +1,4 @@
+import logging
 from dataclasses import dataclass
 
 from ankibot.application.common.selected_deck_store import SelectedDeckStore
@@ -16,6 +17,9 @@ class SelectDeckResult:
     deck_name: str
 
 
+logger = logging.getLogger(__name__)
+
+
 class SelectDeck:
     def __init__(self, gateway: DeckGateway, selected_decks: SelectedDeckStore) -> None:
         self._gateway = gateway
@@ -28,6 +32,7 @@ class SelectDeck:
         # 64-byte callback_data, and rejects a deck deleted since the keyboard was rendered.
         deck_name = next((deck.name for deck in decks if deck.id == request.deck_id), None)
         if deck_name is None:
+            logger.info("The picked deck %s no longer exists in AnkiWeb", request.deck_id)
             raise AnkiDeckNotFoundError
 
         await self._selected_decks.set(request.user_id, request.deck_id)

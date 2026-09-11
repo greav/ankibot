@@ -185,16 +185,19 @@ async def test_generator_cannot_read_an_answer_of_the_wrong_shape() -> None:
             await generator.generate(TEXT_SNIPPET)
 
 
-async def test_generator_cannot_read_a_refusal() -> None:
+async def test_generator_cannot_read_a_refusal(caplog: pytest.LogCaptureFixture) -> None:
     """A model refusal is a distinct branch, not a confusing JSON parse failure on None content."""
     # Arrange
     handler = build_handler(body=chat_completion_body(content=None, refusal="cannot help with that"))
     generator, client = make_generator(handler)
 
-    # Act / Assert
+    # Act
     async with client:
-        with pytest.raises(CardGenerationError, match="cannot help with that"):
+        with caplog.at_level(logging.WARNING), pytest.raises(CardGenerationError, match="cannot help with that"):
             await generator.generate(TEXT_SNIPPET)
+
+    # Assert
+    assert "cannot help with that" in caplog.text
 
 
 async def test_generator_cannot_read_a_truncated_answer() -> None:

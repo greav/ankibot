@@ -68,7 +68,7 @@ class AllowlistMiddleware(BaseMiddleware):
             return await handler(event, data)
 
         if user_id not in self._allowed:
-            logger.warning("Dropped an update from user %s not on the allowlist", user_id, extra={"user_id": user_id})
+            logger.warning("Dropped an update from user %s not on the allowlist", user_id)
             return None
 
         return await handler(event, data)

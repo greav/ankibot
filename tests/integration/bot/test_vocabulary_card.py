@@ -217,18 +217,20 @@ async def test_user_cannot_generate_a_card_when_the_generator_is_unavailable(
 
 
 async def test_user_cannot_generate_a_card_when_fields_are_left_incomplete(
-    dispatcher: Dispatcher, card_generator: FakeCardGenerator
+    dispatcher: Dispatcher, card_generator: FakeCardGenerator, caplog: pytest.LogCaptureFixture
 ) -> None:
-    """A generator that leaves fields empty produces a retry-or-rephrase reply, not a stack trace."""
+    """A generator that leaves fields empty produces a retry-or-rephrase reply, and the log names the fields."""
     # Arrange
     session = RecordingSession()
     card_generator.values = {"Word": "serendipity"}
 
     # Act
-    await send(dispatcher, session, "serendipity", chat_id=6, user_id=6)
+    with caplog.at_level(logging.WARNING):
+        await send(dispatcher, session, "serendipity", chat_id=6, user_id=6)
 
     # Assert
     assert session.last_answer == "Couldn't generate a card for that word. Try again, or rephrase it."
+    assert "Meaning, Example" in caplog.text
 
 
 async def test_user_cannot_generate_a_card_without_authenticating(

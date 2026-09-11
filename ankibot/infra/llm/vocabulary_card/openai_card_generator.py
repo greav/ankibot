@@ -1,3 +1,4 @@
+import logging
 from dataclasses import dataclass
 from typing import override
 
@@ -7,8 +8,11 @@ from ankibot.application.add_vocabulary_word.generate_card import CardFeedback, 
 from ankibot.application.common.dto.image import Image
 from ankibot.application.exceptions.generation import CardGenerationError, CardGenerationUnavailableError
 from ankibot.domain.card_template import CardTemplate
+from ankibot.infra.llm.failures import failure_reason
 from ankibot.infra.llm.vocabulary_card.parsing import parse_fields
 from ankibot.infra.llm.vocabulary_card.prompt import SYSTEM_PROMPT, build_user_content, response_schema
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -37,6 +41,15 @@ class OpenAICardGenerator(CardGenerator):
         *,
         context: Image | None = None,
         feedback: CardFeedback | None = None,
+    ) -> dict[str, str]:
+        try:
+            return await self._ask(word, template, context, feedback)
+        except CardGenerationError as error:
+            logger.warning("Vocabulary card generation by %s failed: %s", self._config.model, failure_reason(error))
+            raise
+
+    async def _ask(
+        self, word: str, template: CardTemplate, context: Image | None, feedback: CardFeedback | None
     ) -> dict[str, str]:
         try:
             response = await self._client.chat.completions.create(

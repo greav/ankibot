@@ -10,6 +10,7 @@ from ankibot.infra.logger import configure_root_logger
 from ankibot.presentation.commands import set_commands
 from ankibot.presentation.handlers import add_card, authenticate, decks, errors, snippet_cards, start, vocabulary_card
 from ankibot.presentation.middlewares.access import AccessConfig, AllowlistMiddleware
+from ankibot.presentation.middlewares.correlation import CorrelationMiddleware
 
 from .config import load_config
 
@@ -22,8 +23,10 @@ def create_dispatcher(container: AsyncContainer, access: AccessConfig) -> Dispat
     """Compose the dispatcher: routers in resolution order, over the container behind ``FromDishka``."""
     dp = Dispatcher()
 
-    # Outer middleware on the update observer, registered before setup_dishka: a stranger's update
-    # is dropped before filters run and before dishka opens a REQUEST container for it.
+    # Outer middlewares on the update observer, registered before setup_dishka. Correlation goes
+    # first so even a dropped update's lines carry its id; the allowlist then drops a stranger's
+    # update before filters run and before dishka opens a REQUEST container for it.
+    dp.update.outer_middleware(CorrelationMiddleware())
     dp.update.outer_middleware(AllowlistMiddleware(access))
 
     dp.include_router(start.router)

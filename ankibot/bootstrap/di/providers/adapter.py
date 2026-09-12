@@ -6,22 +6,17 @@ import httpx
 from dishka import Provider, Scope, WithParents, provide
 from openai import AsyncOpenAI
 
-from ankibot.application.add_snippet_cards import SnippetCardsGenerator
-from ankibot.application.add_vocabulary_word import CardGenerator, WordSuggester
-from ankibot.bootstrap.config import CardGeneratorConfig
 from ankibot.infra.anki.authenticator import AnkiWebAuthenticator
 from ankibot.infra.anki.card_gateway import AnkiWebCardGateway
 from ankibot.infra.anki.deck_gateway import AnkiWebDeckGateway
 from ankibot.infra.anki.svc import AnkiSvcClient
 from ankibot.infra.anki.vocabulary_card_gateway import AnkiWebVocabularyCardGateway
+from ankibot.infra.llm.catalog import ConfigModelCatalog
 from ankibot.infra.llm.openai_client import OpenAIClientConfig, build_openai_client
-from ankibot.infra.llm.snippet_cards.openai_snippet_cards_generator import (
-    OpenAISnippetCardsGenerator,
-    OpenAISnippetCardsGeneratorConfig,
-)
-from ankibot.infra.llm.vocabulary_card.openai_card_generator import OpenAICardGenerator, OpenAICardGeneratorConfig
-from ankibot.infra.llm.vocabulary_card.openai_word_suggester import OpenAIWordSuggester, OpenAIWordSuggesterConfig
-from ankibot.infra.selected_decks import JsonFileSelectedDeckStore
+from ankibot.infra.llm.snippet_cards.openai_snippet_cards_generator import OpenAISnippetCardsGenerator
+from ankibot.infra.llm.vocabulary_card.openai_card_generator import OpenAICardGenerator
+from ankibot.infra.llm.vocabulary_card.openai_word_suggester import OpenAIWordSuggester
+from ankibot.infra.user_preferences import JsonFileUserPreferencesStore
 
 # One client for every AnkiWeb call, because AnkiWeb's session lives in its cookie jar: separate
 # clients would each need their own /auth.
@@ -38,7 +33,15 @@ class AdapterProvider(Provider):
     card_gateway = provide(WithParents[AnkiWebCardGateway])
     deck_gateway = provide(WithParents[AnkiWebDeckGateway])
     vocabulary_card_gateway = provide(WithParents[AnkiWebVocabularyCardGateway])
-    selected_decks = provide(WithParents[JsonFileSelectedDeckStore])
+    # One adapter under both ports: the deck and the model choice share a file.
+    user_preferences = provide(WithParents[JsonFileUserPreferencesStore])
+    model_catalog = provide(WithParents[ConfigModelCatalog])
+    # The model is a per-call argument the interactor resolves, so the adapters need no choice of
+    # provider here; a second provider's adapters would slot in as routing adapters under the
+    # same ports.
+    card_generator = provide(WithParents[OpenAICardGenerator])
+    word_suggester = provide(WithParents[OpenAIWordSuggester])
+    snippet_cards_generator = provide(WithParents[OpenAISnippetCardsGenerator])
 
     @provide
     async def http_client(self) -> AsyncIterator[httpx.AsyncClient]:
@@ -52,39 +55,3 @@ class AdapterProvider(Provider):
         client = build_openai_client(config)
         yield client
         await client.close()
-
-    @provide
-    def card_generator(
-        self,
-        choice: CardGeneratorConfig,
-        client: AsyncOpenAI,
-        generator_config: OpenAICardGeneratorConfig,
-    ) -> CardGenerator:
-        """The vocabulary-card generator for the configured provider."""
-        match choice.provider:
-            case "openai":
-                return OpenAICardGenerator(generator_config, client)
-
-    @provide
-    def word_suggester(
-        self,
-        choice: CardGeneratorConfig,
-        client: AsyncOpenAI,
-        suggester_config: OpenAIWordSuggesterConfig,
-    ) -> WordSuggester:
-        """The screenshot word suggester for the configured provider."""
-        match choice.provider:
-            case "openai":
-                return OpenAIWordSuggester(suggester_config, client)
-
-    @provide
-    def snippet_cards_generator(
-        self,
-        choice: CardGeneratorConfig,
-        client: AsyncOpenAI,
-        generator_config: OpenAISnippetCardsGeneratorConfig,
-    ) -> SnippetCardsGenerator:
-        """The snippet-cards generator for the configured provider."""
-        match choice.provider:
-            case "openai":
-                return OpenAISnippetCardsGenerator(generator_config, client)

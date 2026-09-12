@@ -8,12 +8,14 @@ from openai import AsyncOpenAI
 
 from ankibot.application.add_vocabulary_word import CardFeedback
 from ankibot.application.common.dto.image import Image
+from ankibot.application.common.model_catalog import ModelOption
 from ankibot.application.exceptions.generation import CardGenerationError, CardGenerationUnavailableError
 from ankibot.domain.card_template import CardTemplate
-from ankibot.infra.llm.vocabulary_card.openai_card_generator import OpenAICardGenerator, OpenAICardGeneratorConfig
+from ankibot.infra.llm.vocabulary_card.openai_card_generator import OpenAICardGenerator
 from tests.common.transport import OpenAIHandler, openai_client_for
 
 FAKE_API_KEY = "sk-test-distinctive-s3cr3t-not-real"
+MODEL = ModelOption(id="gpt-4o-mini", label="GPT-4o mini")
 TEMPLATE = CardTemplate(name="English Words V2", fields=("Word", "Meaning", "Example"))
 
 
@@ -46,7 +48,7 @@ def build_handler(
 def make_generator(handler: OpenAIHandler) -> tuple[OpenAICardGenerator, httpx2.AsyncClient]:
     client = openai_client_for(handler)
     openai_client = AsyncOpenAI(api_key=FAKE_API_KEY, http_client=client, max_retries=0)
-    generator = OpenAICardGenerator(OpenAICardGeneratorConfig(model="gpt-4o-mini"), openai_client)
+    generator = OpenAICardGenerator(openai_client)
     return generator, client
 
 
@@ -65,7 +67,7 @@ async def test_generator_can_ask_for_a_redo_with_the_learners_note() -> None:
 
     # Act
     async with client:
-        await generator.generate("hello", TEMPLATE, feedback=feedback)
+        await generator.generate("hello", TEMPLATE, model=MODEL, feedback=feedback)
 
     # Assert
     sent = json.loads(requests[0].content)
@@ -88,7 +90,8 @@ async def test_generator_can_send_the_screenshot_context_as_an_image_part() -> N
 
     # Act
     async with client:
-        await generator.generate("hello", TEMPLATE, context=Image(data=b"fake-jpeg", mime_type="image/jpeg"))
+        screenshot = Image(data=b"fake-jpeg", mime_type="image/jpeg")
+        await generator.generate("hello", TEMPLATE, model=MODEL, context=screenshot)
 
     # Assert
     parts = json.loads(requests[0].content)["messages"][1]["content"]
@@ -111,12 +114,12 @@ async def test_generator_can_fill_a_card_with_a_strict_schema() -> None:
 
     # Act
     async with client:
-        result = await generator.generate("hello", TEMPLATE)
+        result = await generator.generate("hello", TEMPLATE, model=MODEL)
 
     # Assert
     assert result == {"Word": "hello", "Meaning": "hi", "Example": "Hello!"}
     sent = json.loads(requests[0].content)
-    assert sent["model"] == "gpt-4o-mini"
+    assert sent["model"] == MODEL.id
     assert "hello" in sent["messages"][1]["content"]
     json_schema = sent["response_format"]["json_schema"]
     assert json_schema["strict"] is True
@@ -132,7 +135,7 @@ async def test_generator_cannot_fill_a_card_on_a_rate_limit() -> None:
     # Act / Assert
     async with client:
         with pytest.raises(CardGenerationUnavailableError):
-            await generator.generate("hello", TEMPLATE)
+            await generator.generate("hello", TEMPLATE, model=MODEL)
 
 
 async def test_generator_cannot_fill_a_card_on_a_server_error() -> None:
@@ -144,7 +147,7 @@ async def test_generator_cannot_fill_a_card_on_a_server_error() -> None:
     # Act / Assert
     async with client:
         with pytest.raises(CardGenerationUnavailableError):
-            await generator.generate("hello", TEMPLATE)
+            await generator.generate("hello", TEMPLATE, model=MODEL)
 
 
 async def test_generator_cannot_reach_an_unreachable_openai() -> None:
@@ -156,7 +159,7 @@ async def test_generator_cannot_reach_an_unreachable_openai() -> None:
     # Act / Assert
     async with client:
         with pytest.raises(CardGenerationUnavailableError):
-            await generator.generate("hello", TEMPLATE)
+            await generator.generate("hello", TEMPLATE, model=MODEL)
 
 
 async def test_generator_cannot_read_a_response_with_non_json_content() -> None:
@@ -168,7 +171,7 @@ async def test_generator_cannot_read_a_response_with_non_json_content() -> None:
     # Act / Assert
     async with client:
         with pytest.raises(CardGenerationError):
-            await generator.generate("hello", TEMPLATE)
+            await generator.generate("hello", TEMPLATE, model=MODEL)
 
 
 async def test_generator_cannot_read_a_refusal(caplog: pytest.LogCaptureFixture) -> None:
@@ -180,7 +183,7 @@ async def test_generator_cannot_read_a_refusal(caplog: pytest.LogCaptureFixture)
     # Act
     async with client:
         with caplog.at_level(logging.WARNING), pytest.raises(CardGenerationError, match="cannot help with that"):
-            await generator.generate("hello", TEMPLATE)
+            await generator.generate("hello", TEMPLATE, model=MODEL)
 
     # Assert
     assert "cannot help with that" in caplog.text
@@ -195,7 +198,7 @@ async def test_generator_cannot_read_a_truncated_answer() -> None:
     # Act / Assert
     async with client:
         with pytest.raises(CardGenerationError):
-            await generator.generate("hello", TEMPLATE)
+            await generator.generate("hello", TEMPLATE, model=MODEL)
 
 
 async def test_generator_cannot_leak_the_api_key_into_the_logs(caplog: pytest.LogCaptureFixture) -> None:
@@ -207,7 +210,36 @@ async def test_generator_cannot_leak_the_api_key_into_the_logs(caplog: pytest.Lo
     # Act
     async with client:
         with caplog.at_level(logging.DEBUG):
-            await generator.generate("hello", TEMPLATE)
+            await generator.generate("hello", TEMPLATE, model=MODEL)
 
     # Assert
     assert FAKE_API_KEY not in caplog.text
+
+
+@pytest.mark.parametrize(
+    ("model", "expected"),
+    [
+        (ModelOption(id="gpt-5.6-luna", label="Luna", reasoning_effort="none"), "none"),
+        (ModelOption(id="gpt-4.1", label="4.1"), None),
+    ],
+    ids=["pinned", "omitted"],
+)
+async def test_generator_can_pin_the_models_reasoning_effort(model: ModelOption, expected: str | None) -> None:
+    """The catalog's reasoning effort reaches the request, and a model without one gets no such key at all."""
+    # Arrange
+    requests: list[httpx2.Request] = []
+
+    async def handler(request: httpx2.Request) -> httpx2.Response:
+        requests.append(request)
+        return httpx2.Response(200, json=chat_completion_body(content='{"Word": "hello"}'))
+
+    generator, client = make_generator(handler)
+
+    # Act
+    async with client:
+        await generator.generate("hello", TEMPLATE, model=model)
+
+    # Assert
+    sent = json.loads(requests[0].content)
+    assert sent["model"] == model.id
+    assert sent.get("reasoning_effort") == expected

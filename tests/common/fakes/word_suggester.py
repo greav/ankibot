@@ -5,6 +5,7 @@ from typing import override
 
 from ankibot.application.add_vocabulary_word import WordSuggester
 from ankibot.application.common.dto.image import Image
+from ankibot.application.common.model_catalog import ModelOption
 
 
 class FakeWordSuggester(WordSuggester):
@@ -18,7 +19,7 @@ class FakeWordSuggester(WordSuggester):
         self.error = error
 
     @override
-    async def suggest(self, image: Image) -> Sequence[str]:
+    async def suggest(self, image: Image, *, model: ModelOption) -> Sequence[str]:
         """Raise the configured error, or return ``words`` when there is none."""
         if self.error is not None:
             raise self.error

@@ -3,7 +3,8 @@
 # source of truth — server-side edits last only until the next tick (see docs/deploy.md).
 #
 # The config ships inside the image (see the Dockerfile), so only the bot's state is mounted:
-# ./data holds what must outlive a container (each user's /decks choice today).
+# ./data holds what must outlive a container (each user's /decks and /model choices, in
+# user_preferences.json).
 # For a hot config fix without a rebuild, see "Emergency config override" in docs/deploy.md.
 services:
   ankibot:

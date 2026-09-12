@@ -8,7 +8,16 @@ from dishka.integrations.aiogram import inject_router, setup_dishka
 from ankibot.bootstrap.di import make_container, warm_up
 from ankibot.infra.logger import configure_root_logger
 from ankibot.presentation.commands import set_commands
-from ankibot.presentation.handlers import add_card, authenticate, decks, errors, snippet_cards, start, vocabulary_card
+from ankibot.presentation.handlers import (
+    add_card,
+    authenticate,
+    decks,
+    errors,
+    models,
+    snippet_cards,
+    start,
+    vocabulary_card,
+)
 from ankibot.presentation.middlewares.access import AccessConfig, AllowlistMiddleware
 from ankibot.presentation.middlewares.correlation import CorrelationMiddleware
 
@@ -39,6 +48,7 @@ def create_dispatcher(container: AsyncContainer, access: AccessConfig) -> Dispat
     dp.include_router(add_card.router)
     dp.include_router(snippet_cards.router)
     dp.include_router(decks.router)
+    dp.include_router(models.router)
     # vocabulary_card's catch-all message handler must come after every command-specific router,
     # or it would swallow /decks paging callbacks and any future command's plain-text steps.
     dp.include_router(vocabulary_card.router)

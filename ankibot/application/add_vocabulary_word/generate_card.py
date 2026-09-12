@@ -6,6 +6,8 @@ from typing import Protocol
 
 from ankibot.application.add_vocabulary_word.ports import VocabularyCardGateway
 from ankibot.application.common.dto.image import Image
+from ankibot.application.common.model_catalog import ModelCatalog, ModelOption
+from ankibot.application.common.selected_model_store import SelectedModelStore, chosen_model
 from ankibot.application.exceptions.generation import CardGenerationIncompleteError
 from ankibot.domain.card_template import CardTemplate, in_template_order, missing_fields
 
@@ -29,15 +31,17 @@ class CardGenerator(Protocol):
         word: str,
         template: CardTemplate,
         *,
+        model: ModelOption,
         context: Image | None = None,
         feedback: CardFeedback | None = None,
     ) -> Mapping[str, str]:
         """Return a value per template field, keyed by field name.
 
-        ``context`` is a screenshot of the text ``word`` appears in: the fields quoting usage are
-        grounded in that sentence rather than invented. ``feedback`` asks for a redo of a card
-        already shown, with the learner's note on what to change; the previous values travel with
-        it so the note has something to be about.
+        ``model`` is the catalog entry to ask, its id and reasoning effort passed through as is. ``context`` is a
+        screenshot of the text ``word`` appears in: the fields quoting usage are grounded in that
+        sentence rather than invented. ``feedback`` asks for a redo of a card already shown, with
+        the learner's note on what to change; the previous values travel with it so the note has
+        something to be about.
 
         Raises ``CardGenerationUnavailableError`` when the backend cannot be reached, and
         ``CardGenerationError`` when its answer cannot be read.
@@ -47,6 +51,7 @@ class CardGenerator(Protocol):
 
 @dataclass(frozen=True, kw_only=True)
 class GenerateCardRequest:
+    user_id: int
     word: str
     context: Image | None = None
     feedback: CardFeedback | None = None
@@ -61,14 +66,23 @@ class GeneratedCard:
 
 
 class GenerateCard:
-    def __init__(self, gateway: VocabularyCardGateway, generator: CardGenerator) -> None:
+    def __init__(
+        self,
+        gateway: VocabularyCardGateway,
+        generator: CardGenerator,
+        selected_models: SelectedModelStore,
+        catalog: ModelCatalog,
+    ) -> None:
         self._gateway = gateway
         self._generator = generator
+        self._selected_models = selected_models
+        self._catalog = catalog
 
     async def execute(self, request: GenerateCardRequest) -> GeneratedCard:
         target = await self._gateway.target()
+        model = await chosen_model(self._selected_models, self._catalog, request.user_id)
         values = await self._generator.generate(
-            request.word, target.template, context=request.context, feedback=request.feedback
+            request.word, target.template, model=model, context=request.context, feedback=request.feedback
         )
         if missing := missing_fields(target.template, values):
             logger.warning("Vocabulary card left incomplete: %s empty", ", ".join(missing))

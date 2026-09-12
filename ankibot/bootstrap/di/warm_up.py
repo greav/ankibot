@@ -17,7 +17,9 @@ from ankibot.application.add_snippet_cards import SnippetCardsGenerator
 from ankibot.application.add_vocabulary_word import CardGenerator, VocabularyCardGateway, WordSuggester
 from ankibot.application.anki_authentication.authenticate_anki import AnkiAuthenticator
 from ankibot.application.common.card_gateway import CardGateway
+from ankibot.application.common.model_catalog import ModelCatalog
 from ankibot.application.common.selected_deck_store import SelectedDeckStore
+from ankibot.application.common.selected_model_store import SelectedModelStore
 from ankibot.application.manage_decks.ports import DeckGateway
 
 # Every port the bot talks through — the same set ``tests/common/fakes/ports.py`` substitutes.
@@ -29,6 +31,8 @@ _PORTS: tuple[Any, ...] = (
     CardGateway,
     DeckGateway,
     SelectedDeckStore,
+    SelectedModelStore,
+    ModelCatalog,
     VocabularyCardGateway,
     CardGenerator,
     WordSuggester,

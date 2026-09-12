@@ -4,6 +4,7 @@ from collections.abc import Sequence
 from typing import override
 
 from ankibot.application.add_snippet_cards import DraftCard, Snippet, SnippetCardsGenerator
+from ankibot.application.common.model_catalog import ModelOption
 
 
 class FakeSnippetCardsGenerator(SnippetCardsGenerator):
@@ -18,7 +19,7 @@ class FakeSnippetCardsGenerator(SnippetCardsGenerator):
 
     @override
     async def generate(
-        self, snippet: Snippet, *, kept: Sequence[DraftCard] = (), feedback: str | None = None
+        self, snippet: Snippet, *, model: ModelOption, kept: Sequence[DraftCard] = (), feedback: str | None = None
     ) -> Sequence[DraftCard]:
         """Raise the configured error, or return ``cards`` when there is none, whatever was kept or asked."""
         if self.error is not None:

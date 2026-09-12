@@ -22,5 +22,5 @@ class ListDecks:
 
     async def execute(self, request: ListDecksRequest) -> ListDecksResult:
         decks = await self._gateway.list_decks()
-        selected_deck_id = await self._selected_decks.get(request.user_id)
+        selected_deck_id = await self._selected_decks.get_deck(request.user_id)
         return ListDecksResult(decks=decks, selected_deck_id=selected_deck_id)

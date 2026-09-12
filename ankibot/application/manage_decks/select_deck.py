@@ -35,5 +35,5 @@ class SelectDeck:
             logger.info("The picked deck %s no longer exists in AnkiWeb", request.deck_id)
             raise AnkiDeckNotFoundError
 
-        await self._selected_decks.set(request.user_id, request.deck_id)
+        await self._selected_decks.set_deck(request.user_id, request.deck_id)
         return SelectDeckResult(deck_name=deck_name)

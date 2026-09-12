@@ -23,14 +23,14 @@ If you only need to run the project without adding new dependencies:
    python3 -m venv .venv
    ```
 
-2. Activate the virtual environment:
+1. Activate the virtual environment:
 
    ```bash
    # On macOS/Linux
    source .venv/bin/activate
    ```
 
-3. Install dependencies from requirements.txt:
+1. Install dependencies from requirements.txt:
 
    ```bash
    pip install -r requirements.txt
@@ -50,7 +50,7 @@ If you plan to add or modify dependencies:
    uv sync --no-dev
    ```
 
-2. Activate the virtual environment:
+1. Activate the virtual environment:
 
    ```bash
    # On macOS/Linux
@@ -73,7 +73,7 @@ When developing, you have two options to add new packages:
    uv add --dev package_name
    ```
 
-2. Manually editing the `pyproject.toml` file:
+1. Manually editing the `pyproject.toml` file:
 
    ```toml
    # In pyproject.toml
@@ -99,6 +99,12 @@ To run the application locally:
 
 ```bash
 make run
+```
+
+To check which OpenAI models the configured key can call (every id under `model_catalog` in `configs/config.yaml` must be one of them):
+
+```bash
+make list_models
 ```
 
 ### Running with Docker

@@ -11,6 +11,7 @@ from ankibot.application.add_vocabulary_word import GenerateCard, SaveCard, Sugg
 from ankibot.application.anki_authentication import AuthenticateAnki
 from ankibot.application.manage_cards import CreateCard
 from ankibot.application.manage_decks import ListDecks, SelectDeck
+from ankibot.application.manage_models import ListModels, SelectModel
 
 
 class InteractorProvider(Provider):
@@ -23,6 +24,8 @@ class InteractorProvider(Provider):
         CreateCard,
         ListDecks,
         SelectDeck,
+        ListModels,
+        SelectModel,
         GenerateCard,
         SaveCard,
         SuggestWords,

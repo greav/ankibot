@@ -5,6 +5,7 @@ from typing import override
 
 from ankibot.application.add_vocabulary_word import CardFeedback, CardGenerator
 from ankibot.application.common.dto.image import Image
+from ankibot.application.common.model_catalog import ModelOption
 from ankibot.domain.card_template import CardTemplate
 
 
@@ -24,6 +25,7 @@ class FakeCardGenerator(CardGenerator):
         word: str,
         template: CardTemplate,
         *,
+        model: ModelOption,
         context: Image | None = None,
         feedback: CardFeedback | None = None,
     ) -> Mapping[str, str]:

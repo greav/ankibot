@@ -6,7 +6,9 @@ from typing import Protocol
 
 from ankibot.application.common.card_gateway import CardGateway, ensure_front_back
 from ankibot.application.common.dto.image import Image
+from ankibot.application.common.model_catalog import ModelCatalog, ModelOption
 from ankibot.application.common.selected_deck_store import SelectedDeckStore, chosen_deck
+from ankibot.application.common.selected_model_store import SelectedModelStore, chosen_model
 from ankibot.application.exceptions.generation import CardGenerationEmptyError, CardGenerationError
 
 logger = logging.getLogger(__name__)
@@ -42,13 +44,14 @@ class SnippetCardsGenerator(Protocol):
 
     @abstractmethod
     async def generate(
-        self, snippet: Snippet, *, kept: Sequence[DraftCard] = (), feedback: str | None = None
+        self, snippet: Snippet, *, model: ModelOption, kept: Sequence[DraftCard] = (), feedback: str | None = None
     ) -> Sequence[DraftCard]:
         """Return the cards worth keeping from ``snippet``, possibly none.
 
-        ``kept`` are cards the learner has already accepted from this same passage: the answer
-        covers other facts and leaves room for them under the generator's own cap. ``feedback``
-        is the learner's note on what to change about the cards being replaced.
+        ``model`` is the catalog entry to ask, its id and reasoning effort passed through as is. ``kept`` are cards
+        the learner has already accepted from this same passage: the answer covers other facts and
+        leaves room for them under the generator's own cap. ``feedback`` is the learner's note on
+        what to change about the cards being replaced.
 
         Raises ``CardGenerationUnavailableError`` when the backend cannot be reached, and
         ``CardGenerationError`` when its answer cannot be read.
@@ -87,11 +90,18 @@ class GeneratedSnippetCards:
 
 class GenerateCards:
     def __init__(
-        self, gateway: CardGateway, selected_decks: SelectedDeckStore, generator: SnippetCardsGenerator
+        self,
+        gateway: CardGateway,
+        selected_decks: SelectedDeckStore,
+        generator: SnippetCardsGenerator,
+        selected_models: SelectedModelStore,
+        catalog: ModelCatalog,
     ) -> None:
         self._gateway = gateway
         self._selected_decks = selected_decks
         self._generator = generator
+        self._selected_models = selected_models
+        self._catalog = catalog
 
     async def execute(self, request: GenerateSnippetCardsRequest) -> GeneratedSnippetCards:
         # The target is checked before the generator runs, so a wrong deck or notetype costs
@@ -100,7 +110,10 @@ class GenerateCards:
         target = await self._gateway.add_target(deck_id)
         ensure_front_back(target)
 
-        generated = await self._generator.generate(request.snippet, kept=request.kept, feedback=request.feedback)
+        model = await chosen_model(self._selected_models, self._catalog, request.user_id)
+        generated = await self._generator.generate(
+            request.snippet, model=model, kept=request.kept, feedback=request.feedback
+        )
         if blanks := blank_sided(generated):
             logger.warning("Snippet cards left one-sided: %s", ", ".join(map(str, blanks)))
             raise CardGenerationError(f"The generator left card(s) {', '.join(map(str, blanks))} one-sided")

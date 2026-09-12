@@ -14,9 +14,11 @@ from pydantic import BaseModel, ValidationError
 
 from ankibot.application.add_vocabulary_word import WordSuggester
 from ankibot.application.common.dto.image import Image
+from ankibot.application.common.model_catalog import ModelOption
 from ankibot.application.exceptions.generation import CardGenerationError, CardGenerationUnavailableError
 from ankibot.infra.llm.failures import failure_reason
 from ankibot.infra.llm.images import image_data_url
+from ankibot.infra.llm.openai_client import reasoning_effort_argument
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +27,6 @@ logger = logging.getLogger(__name__)
 class OpenAIWordSuggesterConfig:
     """What the adapter itself decides."""
 
-    model: str
     max_candidates: int
 
 
@@ -49,8 +50,8 @@ def build_system_prompt(max_candidates: int) -> str:
 class OpenAIWordSuggester(WordSuggester):
     """Picks look-up candidates out of a screenshot with OpenAI's structured outputs.
 
-    The screenshot goes to the model directly as an image part — the configured model must accept
-    image input; there is no separate OCR step.
+    The screenshot goes to the model directly as an image part — every model the catalog offers
+    must accept image input; there is no separate OCR step.
     """
 
     def __init__(self, config: OpenAIWordSuggesterConfig, client: AsyncOpenAI) -> None:
@@ -58,17 +59,18 @@ class OpenAIWordSuggester(WordSuggester):
         self._client = client
 
     @override
-    async def suggest(self, image: Image) -> tuple[str, ...]:
+    async def suggest(self, image: Image, *, model: ModelOption) -> tuple[str, ...]:
         try:
-            return await self._ask(image)
+            return await self._ask(model, image)
         except CardGenerationError as error:
-            logger.warning("Word suggestion by %s failed: %s", self._config.model, failure_reason(error))
+            logger.warning("Word suggestion by %s failed: %s", model.id, failure_reason(error))
             raise
 
-    async def _ask(self, image: Image) -> tuple[str, ...]:
+    async def _ask(self, model: ModelOption, image: Image) -> tuple[str, ...]:
         try:
             response = await self._client.chat.completions.parse(
-                model=self._config.model,
+                model=model.id,
+                reasoning_effort=reasoning_effort_argument(model),
                 messages=[
                     {"role": "system", "content": build_system_prompt(self._config.max_candidates)},
                     {"role": "user", "content": [{"type": "image_url", "image_url": {"url": image_data_url(image)}}]},

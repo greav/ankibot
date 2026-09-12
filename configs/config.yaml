@@ -26,13 +26,43 @@ anki_vocabulary_cards:
   deck_name: "English Words V2"
   notetype_name: "English Words Context" # the NOTETYPE's name; not always the deck's
 
-selected_decks:
-  # Where each user's /decks choice is kept between restarts. Relative to the working
+user_preferences:
+  # Where each user's /decks and /model choices are kept between restarts. Relative to the working
   # directory: data/ in the repo locally, /opt/data in the container (see deploy/compose.yaml).
-  path: data/selected_decks.json
+  path: data/user_preferences.json
 
-card_generator:
-  provider: openai # the only adapter today; an anthropic branch slots in beside it
+model_catalog:
+  # What /model offers. Every entry must support json_schema structured outputs AND image input:
+  # one choice serves vocabulary cards, screenshot word suggestions and snippet cards alike.
+  # `make list_models` shows which ids the configured key can call.
+  #
+  # reasoning_effort: a card is a few hundred tokens, and a model that reasons by default answers
+  # it slower and dearer for no better card, so every reasoning model is pinned to `none`. Leave
+  # it out for a model that takes no such setting (the GPT-4.1 family rejects the parameter).
+  default: gpt-5.6-terra
+  models:
+    - id: gpt-5.6-sol
+      provider: openai
+      label: "GPT-5.6 Sol"
+      reasoning_effort: none
+    - id: gpt-5.6-terra
+      provider: openai
+      label: "GPT-5.6 Terra"
+      reasoning_effort: none
+    - id: gpt-5.6-luna
+      provider: openai
+      label: "GPT-5.6 Luna"
+      reasoning_effort: none
+    - id: gpt-5.4-mini
+      provider: openai
+      label: "GPT-5.4 mini"
+      reasoning_effort: none
+    - id: gpt-4.1
+      provider: openai
+      label: "GPT-4.1"
+    - id: gpt-4.1-mini
+      provider: openai
+      label: "GPT-4.1 mini"
 
 openai_client:
   api_key: ${oc.env:OPENAI_API_KEY}
@@ -40,20 +70,10 @@ openai_client:
   timeout_seconds: 30.0
   max_retries: 2
 
-openai_card_generator:
-  # Any model supporting json_schema structured outputs (the schema is sent strict).
-  model: ${oc.env:OPENAI_MODEL,gpt-4o-mini}
-
 openai_word_suggester:
-  # Must support json_schema structured outputs AND image input: the screenshot goes to the model
-  # directly, there is no separate OCR step.
-  model: ${oc.env:OPENAI_MODEL,gpt-4o-mini}
   # Upper bound on the words offered to pick from one screenshot; the model may return fewer.
   max_candidates: 6
 
 openai_snippet_cards:
-  # Must support json_schema structured outputs AND image input: screenshots go to the model
-  # directly, there is no separate OCR step.
-  model: ${oc.env:OPENAI_MODEL,gpt-4o-mini}
   # Upper bound on cards distilled from one snippet; the model may return fewer.
   max_cards: 8

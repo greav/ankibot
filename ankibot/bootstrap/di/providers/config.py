@@ -11,15 +11,15 @@ graph, so no factory below can ask for it.
 
 from dishka import Provider, Scope, provide
 
-from ankibot.bootstrap.config import CardGeneratorConfig, Config
+from ankibot.bootstrap.config import Config
 from ankibot.infra.anki.authenticator import AnkiWebAuthenticatorConfig
 from ankibot.infra.anki.svc import AnkiSvcClientConfig
 from ankibot.infra.anki.vocabulary_card_gateway import AnkiWebVocabularyCardGatewayConfig
+from ankibot.infra.llm.catalog import ModelCatalogConfig
 from ankibot.infra.llm.openai_client import OpenAIClientConfig
 from ankibot.infra.llm.snippet_cards.openai_snippet_cards_generator import OpenAISnippetCardsGeneratorConfig
-from ankibot.infra.llm.vocabulary_card.openai_card_generator import OpenAICardGeneratorConfig
 from ankibot.infra.llm.vocabulary_card.openai_word_suggester import OpenAIWordSuggesterConfig
-from ankibot.infra.selected_decks import JsonFileSelectedDeckStoreConfig
+from ankibot.infra.user_preferences import JsonFileUserPreferencesStoreConfig
 
 
 class ConfigProvider(Provider):
@@ -44,20 +44,16 @@ class ConfigProvider(Provider):
         return self._config.anki_vocabulary_cards
 
     @provide
-    def selected_decks(self) -> JsonFileSelectedDeckStoreConfig:
-        return self._config.selected_decks
+    def user_preferences(self) -> JsonFileUserPreferencesStoreConfig:
+        return self._config.user_preferences
 
     @provide
-    def card_generator_choice(self) -> CardGeneratorConfig:
-        return self._config.card_generator
+    def model_catalog(self) -> ModelCatalogConfig:
+        return self._config.model_catalog
 
     @provide
     def openai_client(self) -> OpenAIClientConfig:
         return self._config.openai_client
-
-    @provide
-    def openai_card_generator(self) -> OpenAICardGeneratorConfig:
-        return self._config.openai_card_generator
 
     @provide
     def openai_word_suggester(self) -> OpenAIWordSuggesterConfig:

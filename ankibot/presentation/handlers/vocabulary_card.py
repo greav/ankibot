@@ -41,6 +41,7 @@ from ankibot.application.exceptions.generation import (
     CardGenerationUnavailableError,
 )
 from ankibot.presentation.deck_picker import AUTH_FIRST, edit_into
+from ankibot.presentation.identity import TelegramUserId
 from ankibot.presentation.images import PHOTO_JPEG_MIME, download_image
 from ankibot.presentation.keyboards.generated_card import GeneratedCardCallback, generated_card_keyboard
 from ankibot.presentation.keyboards.word_candidates import WordCandidateCallback, word_candidates_keyboard
@@ -112,6 +113,7 @@ async def _send_preview(
     message: Message,
     state: FSMContext,
     generate_card: GenerateCard,
+    user_id: TelegramUserId,
     word: str,
     context: ScreenshotContext | None = None,
     feedback: CardFeedback | None = None,
@@ -127,7 +129,9 @@ async def _send_preview(
 
     image, file_id, mime_type = context if context is not None else (None, None, None)
     try:
-        result = await generate_card.execute(GenerateCardRequest(word=word, context=image, feedback=feedback))
+        result = await generate_card.execute(
+            GenerateCardRequest(user_id=user_id, word=word, context=image, feedback=feedback)
+        )
     except CardGenerationUnavailableError:
         await state.clear()
         await message.answer(GENERATOR_UNAVAILABLE)
@@ -169,6 +173,7 @@ async def _handle_word_image(
     state: FSMContext,
     suggest_words: SuggestWords,
     generate_card: GenerateCard,
+    user_id: TelegramUserId,
     *,
     file_id: str,
     mime_type: str,
@@ -185,12 +190,12 @@ async def _handle_word_image(
 
     word = plain_text(message.caption)
     if word is not None:
-        await _send_preview(message, state, generate_card, word, (image, file_id, mime_type))
+        await _send_preview(message, state, generate_card, user_id, word, (image, file_id, mime_type))
         return
 
     await bot.send_chat_action(chat_id=message.chat.id, action="typing")
     try:
-        result = await suggest_words.execute(SuggestWordsRequest(image=image))
+        result = await suggest_words.execute(SuggestWordsRequest(user_id=user_id, image=image))
     except CardGenerationEmptyError:
         await state.set_state(WordCard.waiting_for_word)
         await message.answer(NO_WORDS_FOUND)
@@ -217,7 +222,12 @@ async def word_cmd_handler(message: Message, state: FSMContext) -> None:
 
 
 @router.message(StateFilter(WordCard.waiting_for_word, WordCard.choosing_word), F.text, ~F.text.startswith("/"))
-async def awaited_word_handler(message: Message, state: FSMContext, generate_card: FromDishka[GenerateCard]) -> None:
+async def awaited_word_handler(
+    message: Message,
+    state: FSMContext,
+    generate_card: FromDishka[GenerateCard],
+    user_id: FromDishka[TelegramUserId],
+) -> None:
     # /word has been sent, so any usable length qualifies — the length line only splits implicit input.
     word = plain_text(message.text)
     if word is None:
@@ -232,7 +242,7 @@ async def awaited_word_handler(message: Message, state: FSMContext, generate_car
             await state.clear()
             await message.answer(IMAGE_UNREADABLE)
             return
-    await _send_preview(message, state, generate_card, word, context)
+    await _send_preview(message, state, generate_card, user_id, word, context)
 
 
 @router.message(StateFilter(WordCard.waiting_for_word, WordCard.choosing_word), F.photo)
@@ -241,12 +251,15 @@ async def word_photo_handler(
     state: FSMContext,
     suggest_words: FromDishka[SuggestWords],
     generate_card: FromDishka[GenerateCard],
+    user_id: FromDishka[TelegramUserId],
 ) -> None:
     if not message.photo:
         return
     # The last PhotoSize is the largest one Telegram offers.
     file_id = message.photo[-1].file_id
-    await _handle_word_image(message, state, suggest_words, generate_card, file_id=file_id, mime_type=PHOTO_JPEG_MIME)
+    await _handle_word_image(
+        message, state, suggest_words, generate_card, user_id, file_id=file_id, mime_type=PHOTO_JPEG_MIME
+    )
 
 
 @router.message(
@@ -258,12 +271,19 @@ async def word_document_handler(
     state: FSMContext,
     suggest_words: FromDishka[SuggestWords],
     generate_card: FromDishka[GenerateCard],
+    user_id: FromDishka[TelegramUserId],
 ) -> None:
     document = message.document
     if document is None or document.mime_type is None:
         return
     await _handle_word_image(
-        message, state, suggest_words, generate_card, file_id=document.file_id, mime_type=document.mime_type
+        message,
+        state,
+        suggest_words,
+        generate_card,
+        user_id,
+        file_id=document.file_id,
+        mime_type=document.mime_type,
     )
 
 
@@ -273,6 +293,7 @@ async def word_candidate_handler(
     callback_data: WordCandidateCallback,
     state: FSMContext,
     generate_card: FromDishka[GenerateCard],
+    user_id: FromDishka[TelegramUserId],
 ) -> None:
     """The learner picked a word off the screenshot: make its card with the screenshot as context."""
     data = await state.get_data()
@@ -287,22 +308,32 @@ async def word_candidate_handler(
             await state.clear()
             await message.answer(IMAGE_UNREADABLE)
         else:
-            await _send_preview(message, state, generate_card, word, context)
+            await _send_preview(message, state, generate_card, user_id, word, context)
     await callback.answer()
 
 
 @router.message(StateFilter(None, WordCard.confirming), F.text, ~F.text.startswith("/"))
-async def word_handler(message: Message, state: FSMContext, generate_card: FromDishka[GenerateCard]) -> None:
+async def word_handler(
+    message: Message,
+    state: FSMContext,
+    generate_card: FromDishka[GenerateCard],
+    user_id: FromDishka[TelegramUserId],
+) -> None:
     word = word_query(message.text)
     if word is None:
         return
 
     await _clear_previous_keyboard(message, state)
-    await _send_preview(message, state, generate_card, word)
+    await _send_preview(message, state, generate_card, user_id, word)
 
 
 @router.message(WordCard.waiting_for_feedback, F.text, ~F.text.startswith("/"))
-async def feedback_text_handler(message: Message, state: FSMContext, generate_card: FromDishka[GenerateCard]) -> None:
+async def feedback_text_handler(
+    message: Message,
+    state: FSMContext,
+    generate_card: FromDishka[GenerateCard],
+    user_id: FromDishka[TelegramUserId],
+) -> None:
     """The note "Regenerate with feedback" asked for: redo the card with it."""
     note = plain_text(message.text)
     if note is None:
@@ -318,7 +349,9 @@ async def feedback_text_handler(message: Message, state: FSMContext, generate_ca
         await message.answer(IMAGE_UNREADABLE)
         return
     await _clear_previous_keyboard(message, state)
-    await _send_preview(message, state, generate_card, word, context, CardFeedback(note=note, previous=previous))
+    await _send_preview(
+        message, state, generate_card, user_id, word, context, CardFeedback(note=note, previous=previous)
+    )
 
 
 @router.callback_query(GeneratedCardCallback.filter(), StateFilter(WordCard.confirming, WordCard.waiting_for_feedback))
@@ -328,6 +361,7 @@ async def generated_card_action_handler(
     state: FSMContext,
     generate_card: FromDishka[GenerateCard],
     save_card: FromDishka[SaveCard],
+    user_id: FromDishka[TelegramUserId],
 ) -> None:
     if callback_data.action == "cancel":
         await state.clear()
@@ -343,7 +377,7 @@ async def generated_card_action_handler(
                 await state.clear()
                 await edit_into(callback, IMAGE_UNREADABLE)
             else:
-                await _send_preview(callback.message, state, generate_card, word, context)
+                await _send_preview(callback.message, state, generate_card, user_id, word, context)
     elif callback_data.action == "feedback":
         if isinstance(callback.message, Message):
             await state.set_state(WordCard.waiting_for_feedback)

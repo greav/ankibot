@@ -5,7 +5,7 @@ PROTO_SRC := $(shell find proto -name '*.proto')
 # them ("ankiweb.common_pb2"), with no sys.path or mypy_path juggling needed.
 PROTO_STAMP := ankiweb/.stamp
 
-.PHONY: clean export_requirements compile_proto run test build_image run_container
+.PHONY: clean export_requirements compile_proto run test list_models build_image run_container
 
 clean:
 	find . -type f -name "*.py[co]" -delete
@@ -32,6 +32,10 @@ run: $(PROTO_STAMP)
 
 test: $(PROTO_STAMP)
 	uv run pytest
+
+# Models the configured OpenAI key can call, one id per line (see scripts/list_openai_models.py).
+list_models: $(PROTO_STAMP)
+	uv run --env-file .env python -m scripts.list_openai_models
 
 build_image:
 	docker build -t ankibot .

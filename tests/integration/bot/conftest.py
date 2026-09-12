@@ -6,6 +6,7 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from dishka import AsyncContainer
 
 from ankibot.application.add_snippet_cards import DraftCard
+from ankibot.application.common.model_catalog import ModelOption
 from ankibot.application.manage_decks import Deck
 from ankibot.bootstrap.bot import create_dispatcher
 from ankibot.presentation.middlewares.access import AccessConfig
@@ -13,8 +14,10 @@ from tests.common.fakes.anki_authenticator import FakeAnkiAuthenticator
 from tests.common.fakes.card_gateway import FakeCardGateway
 from tests.common.fakes.card_generator import FakeCardGenerator
 from tests.common.fakes.deck_gateway import FakeDeckGateway
+from tests.common.fakes.model_catalog import FakeModelCatalog
 from tests.common.fakes.ports import make_fake_container
 from tests.common.fakes.selected_deck_store import FakeSelectedDeckStore
+from tests.common.fakes.selected_model_store import FakeSelectedModelStore
 from tests.common.fakes.snippet_cards_generator import FakeSnippetCardsGenerator
 from tests.common.fakes.vocabulary_card_gateway import DEFAULT_TEMPLATE, FakeVocabularyCardGateway
 from tests.common.fakes.word_suggester import FakeWordSuggester
@@ -25,6 +28,11 @@ MAX_ALLOWED_TEST_USER_ID = 99
 
 DEFAULT_DECKS = {1: "Default", 2: "Spanish"}
 DEFAULT_DECK_ID = 1
+DEFAULT_MODEL_OPTIONS = [
+    ModelOption(id="gpt-4o-mini", label="GPT-4o mini"),
+    ModelOption(id="gpt-5-mini", label="GPT-5 mini"),
+]
+DEFAULT_MODEL_ID = "gpt-4o-mini"
 DEFAULT_GENERATED_VALUES = {"Word": "serendipity", "Meaning": "a pleasant surprise", "Example": "What a serendipity!"}
 DEFAULT_SUGGESTED_WORDS = ["serendipity", "ubiquitous"]
 DEFAULT_SNIPPET_CARDS = [
@@ -70,6 +78,18 @@ def selected_decks() -> FakeSelectedDeckStore:
 
 
 @pytest.fixture(scope="session")
+def selected_models() -> FakeSelectedModelStore:
+    """The model choices behind the dispatcher; ``reset_selected_models`` empties them per test."""
+    return FakeSelectedModelStore()
+
+
+@pytest.fixture(scope="session")
+def model_catalog() -> FakeModelCatalog:
+    """The models /model offers; ``reset_model_catalog`` restores the list per test."""
+    return FakeModelCatalog(options=list(DEFAULT_MODEL_OPTIONS), default_id=DEFAULT_MODEL_ID)
+
+
+@pytest.fixture(scope="session")
 def vocabulary_card_gateway() -> FakeVocabularyCardGateway:
     """The fake behind GenerateCard/SaveCard; ``reset_vocabulary_card_gateway`` restores it per test."""
     return FakeVocabularyCardGateway()
@@ -99,6 +119,8 @@ async def container(
     card_gateway: FakeCardGateway,
     deck_gateway: FakeDeckGateway,
     selected_decks: FakeSelectedDeckStore,
+    selected_models: FakeSelectedModelStore,
+    model_catalog: FakeModelCatalog,
     vocabulary_card_gateway: FakeVocabularyCardGateway,
     card_generator: FakeCardGenerator,
     word_suggester: FakeWordSuggester,
@@ -110,6 +132,8 @@ async def container(
         card_gateway=card_gateway,
         deck_gateway=deck_gateway,
         selected_decks=selected_decks,
+        selected_models=selected_models,
+        model_catalog=model_catalog,
         vocabulary_card_gateway=vocabulary_card_gateway,
         card_generator=card_generator,
         word_suggester=word_suggester,
@@ -167,6 +191,19 @@ def reset_selected_decks(selected_decks: FakeSelectedDeckStore) -> None:
     begin with /decks; a test about the missing choice drops its own user instead.
     """
     selected_decks.decks = dict.fromkeys(range(1, MAX_ALLOWED_TEST_USER_ID + 1), DEFAULT_DECK_ID)
+
+
+@pytest.fixture(autouse=True)
+def reset_selected_models(selected_models: FakeSelectedModelStore) -> None:
+    """Start every test with nobody having picked a model, so the catalog's default serves them."""
+    selected_models.models.clear()
+
+
+@pytest.fixture(autouse=True)
+def reset_model_catalog(model_catalog: FakeModelCatalog) -> None:
+    """Undo whatever the previous test asked the shared catalog to offer."""
+    model_catalog.options_list = list(DEFAULT_MODEL_OPTIONS)
+    model_catalog.default_id = DEFAULT_MODEL_ID
 
 
 @pytest.fixture(autouse=True)

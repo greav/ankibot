@@ -8,6 +8,7 @@ from openai import AsyncOpenAI
 
 from ankibot.application.add_snippet_cards import DraftCard, Snippet
 from ankibot.application.common.dto.image import Image
+from ankibot.application.common.model_catalog import ModelOption
 from ankibot.application.exceptions.generation import CardGenerationError, CardGenerationUnavailableError
 from ankibot.infra.llm.snippet_cards.openai_snippet_cards_generator import (
     OpenAISnippetCardsGenerator,
@@ -16,6 +17,7 @@ from ankibot.infra.llm.snippet_cards.openai_snippet_cards_generator import (
 from tests.common.transport import OpenAIHandler, openai_client_for
 
 FAKE_API_KEY = "sk-test-distinctive-s3cr3t-not-real"
+MODEL = ModelOption(id="gpt-4o-mini", label="GPT-4o mini")
 TEXT_SNIPPET = Snippet(text="The GIL serializes Python bytecode execution.")
 
 
@@ -54,7 +56,7 @@ def make_generator(
 ) -> tuple[OpenAISnippetCardsGenerator, httpx2.AsyncClient]:
     client = openai_client_for(handler)
     openai_client = AsyncOpenAI(api_key=FAKE_API_KEY, http_client=client, max_retries=0)
-    config = OpenAISnippetCardsGeneratorConfig(model="gpt-4o-mini", max_cards=max_cards)
+    config = OpenAISnippetCardsGeneratorConfig(max_cards=max_cards)
     return OpenAISnippetCardsGenerator(config, openai_client), client
 
 
@@ -72,12 +74,12 @@ async def test_generator_can_distill_a_text_snippet_with_a_strict_schema() -> No
 
     # Act
     async with client:
-        result = await generator.generate(TEXT_SNIPPET)
+        result = await generator.generate(TEXT_SNIPPET, model=MODEL)
 
     # Assert
     assert result == (DraftCard(front="What is the GIL?", back="A lock"), DraftCard(front="Q2", back="A2"))
     sent = json.loads(requests[0].content)
-    assert sent["model"] == "gpt-4o-mini"
+    assert sent["model"] == MODEL.id
     assert "at most 3" in sent["messages"][0]["content"]
     assert sent["messages"][1]["content"] == "The GIL serializes Python bytecode execution."
     json_schema = sent["response_format"]["json_schema"]
@@ -102,7 +104,7 @@ async def test_generator_can_leave_room_for_the_kept_cards_under_the_cap() -> No
 
     # Act
     async with client:
-        result = await generator.generate(TEXT_SNIPPET, kept=kept, feedback="shorter backs")
+        result = await generator.generate(TEXT_SNIPPET, model=MODEL, kept=kept, feedback="shorter backs")
 
     # Assert
     assert result == (DraftCard(front="Q3", back="A3"), DraftCard(front="Q4", back="A4"))
@@ -126,7 +128,7 @@ async def test_generator_can_send_a_screenshot_as_an_image_part() -> None:
 
     # Act
     async with client:
-        await generator.generate(snippet)
+        await generator.generate(snippet, model=MODEL)
 
     # Assert
     sent = json.loads(requests[0].content)
@@ -145,7 +147,7 @@ async def test_generator_cannot_distill_on_a_rate_limit() -> None:
     # Act / Assert
     async with client:
         with pytest.raises(CardGenerationUnavailableError):
-            await generator.generate(TEXT_SNIPPET)
+            await generator.generate(TEXT_SNIPPET, model=MODEL)
 
 
 async def test_generator_cannot_reach_an_unreachable_openai() -> None:
@@ -157,7 +159,7 @@ async def test_generator_cannot_reach_an_unreachable_openai() -> None:
     # Act / Assert
     async with client:
         with pytest.raises(CardGenerationUnavailableError):
-            await generator.generate(TEXT_SNIPPET)
+            await generator.generate(TEXT_SNIPPET, model=MODEL)
 
 
 async def test_generator_cannot_read_a_response_with_non_json_content() -> None:
@@ -169,7 +171,7 @@ async def test_generator_cannot_read_a_response_with_non_json_content() -> None:
     # Act / Assert
     async with client:
         with pytest.raises(CardGenerationError):
-            await generator.generate(TEXT_SNIPPET)
+            await generator.generate(TEXT_SNIPPET, model=MODEL)
 
 
 async def test_generator_cannot_read_an_answer_of_the_wrong_shape() -> None:
@@ -182,7 +184,7 @@ async def test_generator_cannot_read_an_answer_of_the_wrong_shape() -> None:
     # Act / Assert
     async with client:
         with pytest.raises(CardGenerationError):
-            await generator.generate(TEXT_SNIPPET)
+            await generator.generate(TEXT_SNIPPET, model=MODEL)
 
 
 async def test_generator_cannot_read_a_refusal(caplog: pytest.LogCaptureFixture) -> None:
@@ -194,7 +196,7 @@ async def test_generator_cannot_read_a_refusal(caplog: pytest.LogCaptureFixture)
     # Act
     async with client:
         with caplog.at_level(logging.WARNING), pytest.raises(CardGenerationError, match="cannot help with that"):
-            await generator.generate(TEXT_SNIPPET)
+            await generator.generate(TEXT_SNIPPET, model=MODEL)
 
     # Assert
     assert "cannot help with that" in caplog.text
@@ -209,7 +211,7 @@ async def test_generator_cannot_read_a_truncated_answer() -> None:
     # Act / Assert
     async with client:
         with pytest.raises(CardGenerationError):
-            await generator.generate(TEXT_SNIPPET)
+            await generator.generate(TEXT_SNIPPET, model=MODEL)
 
 
 async def test_generator_cannot_leak_the_api_key_into_the_logs(caplog: pytest.LogCaptureFixture) -> None:
@@ -221,7 +223,36 @@ async def test_generator_cannot_leak_the_api_key_into_the_logs(caplog: pytest.Lo
     # Act
     async with client:
         with caplog.at_level(logging.DEBUG):
-            await generator.generate(TEXT_SNIPPET)
+            await generator.generate(TEXT_SNIPPET, model=MODEL)
 
     # Assert
     assert FAKE_API_KEY not in caplog.text
+
+
+@pytest.mark.parametrize(
+    ("model", "expected"),
+    [
+        (ModelOption(id="gpt-5.6-luna", label="Luna", reasoning_effort="none"), "none"),
+        (ModelOption(id="gpt-4.1", label="4.1"), None),
+    ],
+    ids=["pinned", "omitted"],
+)
+async def test_generator_can_pin_the_models_reasoning_effort(model: ModelOption, expected: str | None) -> None:
+    """The catalog's reasoning effort reaches the request, and a model without one gets no such key at all."""
+    # Arrange
+    requests: list[httpx2.Request] = []
+
+    async def handler(request: httpx2.Request) -> httpx2.Response:
+        requests.append(request)
+        return httpx2.Response(200, json=chat_completion_body(content=cards_content(("Q", "A"))))
+
+    generator, client = make_generator(handler)
+
+    # Act
+    async with client:
+        await generator.generate(TEXT_SNIPPET, model=model)
+
+    # Assert
+    sent = json.loads(requests[0].content)
+    assert sent["model"] == model.id
+    assert sent.get("reasoning_effort") == expected

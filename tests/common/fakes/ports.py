@@ -16,7 +16,9 @@ from ankibot.application.add_snippet_cards import SnippetCardsGenerator
 from ankibot.application.add_vocabulary_word import CardGenerator, VocabularyCardGateway, WordSuggester
 from ankibot.application.anki_authentication.authenticate_anki import AnkiAuthenticator
 from ankibot.application.common.card_gateway import CardGateway
+from ankibot.application.common.model_catalog import ModelCatalog
 from ankibot.application.common.selected_deck_store import SelectedDeckStore
+from ankibot.application.common.selected_model_store import SelectedModelStore
 from ankibot.application.manage_decks.ports import DeckGateway
 from ankibot.bootstrap.di.providers import IdentityProvider, InteractorProvider
 
@@ -33,6 +35,8 @@ class FakePortProvider(Provider):
         card_gateway: CardGateway,
         deck_gateway: DeckGateway,
         selected_decks: SelectedDeckStore,
+        selected_models: SelectedModelStore,
+        model_catalog: ModelCatalog,
         vocabulary_card_gateway: VocabularyCardGateway,
         card_generator: CardGenerator,
         word_suggester: WordSuggester,
@@ -43,6 +47,8 @@ class FakePortProvider(Provider):
         self._card_gateway = card_gateway
         self._deck_gateway = deck_gateway
         self._selected_decks = selected_decks
+        self._selected_models = selected_models
+        self._model_catalog = model_catalog
         self._vocabulary_card_gateway = vocabulary_card_gateway
         self._card_generator = card_generator
         self._word_suggester = word_suggester
@@ -63,6 +69,14 @@ class FakePortProvider(Provider):
     @provide
     def selected_deck_store(self) -> SelectedDeckStore:
         return self._selected_decks
+
+    @provide
+    def selected_model_store(self) -> SelectedModelStore:
+        return self._selected_models
+
+    @provide
+    def model_catalog(self) -> ModelCatalog:
+        return self._model_catalog
 
     @provide
     def vocabulary_card_gateway(self) -> VocabularyCardGateway:
@@ -87,6 +101,8 @@ def make_fake_container(
     card_gateway: CardGateway,
     deck_gateway: DeckGateway,
     selected_decks: SelectedDeckStore,
+    selected_models: SelectedModelStore,
+    model_catalog: ModelCatalog,
     vocabulary_card_gateway: VocabularyCardGateway,
     card_generator: CardGenerator,
     word_suggester: WordSuggester,
@@ -99,6 +115,8 @@ def make_fake_container(
             card_gateway=card_gateway,
             deck_gateway=deck_gateway,
             selected_decks=selected_decks,
+            selected_models=selected_models,
+            model_catalog=model_catalog,
             vocabulary_card_gateway=vocabulary_card_gateway,
             card_generator=card_generator,
             word_suggester=word_suggester,

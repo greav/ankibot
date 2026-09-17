@@ -13,6 +13,7 @@ from dishka import Provider, Scope, provide
 
 from ankibot.bootstrap.config import Config
 from ankibot.infra.anki.authenticator import AnkiWebAuthenticatorConfig
+from ankibot.infra.anki.card_gateway import AnkiWebCardGatewayConfig
 from ankibot.infra.anki.svc import AnkiSvcClientConfig
 from ankibot.infra.anki.vocabulary_card_gateway import AnkiWebVocabularyCardGatewayConfig
 from ankibot.infra.llm.catalog import ModelCatalogConfig
@@ -38,6 +39,10 @@ class ConfigProvider(Provider):
     @provide
     def anki_svc(self) -> AnkiSvcClientConfig:
         return self._config.anki_svc
+
+    @provide
+    def anki_cards(self) -> AnkiWebCardGatewayConfig:
+        return self._config.anki_cards
 
     @provide
     def anki_vocabulary_cards(self) -> AnkiWebVocabularyCardGatewayConfig:

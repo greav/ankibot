@@ -4,6 +4,7 @@ from omegaconf import OmegaConf
 from pydantic import TypeAdapter
 
 from ankibot.infra.anki.authenticator import AnkiWebAuthenticatorConfig
+from ankibot.infra.anki.card_gateway import AnkiWebCardGatewayConfig
 from ankibot.infra.anki.svc import AnkiSvcClientConfig
 from ankibot.infra.anki.vocabulary_card_gateway import AnkiWebVocabularyCardGatewayConfig
 from ankibot.infra.llm.catalog import ModelCatalogConfig
@@ -27,6 +28,7 @@ class Config:
     logger: LoggerConfig
     anki_web: AnkiWebAuthenticatorConfig
     anki_svc: AnkiSvcClientConfig
+    anki_cards: AnkiWebCardGatewayConfig
     anki_vocabulary_cards: AnkiWebVocabularyCardGatewayConfig
     user_preferences: JsonFileUserPreferencesStoreConfig
     model_catalog: ModelCatalogConfig

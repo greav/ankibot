@@ -92,7 +92,9 @@ ______________________________________________________________________
 ## Notes for building a client (e.g. ankibot)
 
 - The card-adding path is the chain
-  `account/login` → `editor/get-info-for-adding` → `editor/add-or-update`.
+  `account/login` → `editor/get-info-for-adding` → `editor/get-notetype-fields` → `editor/add-or-update`.
+  Resolve the notetype by name from `get-info-for-adding`, never from its `current_notetype_id`:
+  an `add-or-update` makes its notetype current, so that field follows whatever was added last.
 - Requests go over binary protobuf, so only field **numbers** and **types** reach
   the wire — field names in the `.proto` can be renamed freely.
 - `.proto` files are the contract of an external system.

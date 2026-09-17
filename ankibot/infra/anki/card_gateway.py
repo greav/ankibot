@@ -1,22 +1,39 @@
 import logging
+from dataclasses import dataclass
 from typing import override
 
 from ankibot.application.common.card_gateway import AddTarget, CardGateway
-from ankibot.application.exceptions.anki import AnkiCardCreationError, AnkiDeckNotFoundError
+from ankibot.application.exceptions.anki import (
+    AnkiCardCreationError,
+    AnkiDeckNotFoundError,
+    AnkiTemplateTargetNotFoundError,
+)
 from ankibot.infra.anki.svc import AnkiSvcClient
 from ankiweb.editor.add_or_update_pb2 import AddOrUpdateRequest, AddOrUpdateResponse
 from ankiweb.editor.get_info_for_adding_pb2 import GetInfoForAddingRequest, GetInfoForAddingResponse
+from ankiweb.editor.get_notetype_fields_pb2 import GetNotetypeFieldsRequest, GetNotetypeFieldsResponse
 
 logger = logging.getLogger(__name__)
 
 
-class AnkiWebCardGateway(CardGateway):
-    """Adds notes through AnkiWeb's editor endpoints.
+@dataclass(frozen=True, kw_only=True)
+class AnkiWebCardGatewayConfig:
+    notetype_name: str
 
-    See docs/ankiweb-api.md for the `editor/get-info-for-adding` → `editor/add-or-update` chain.
+
+class AnkiWebCardGateway(CardGateway):
+    """Adds notes through AnkiWeb's editor endpoints, with a configured notetype.
+
+    The notetype is resolved by name rather than taken from what the editor reports as current:
+    adding a note makes its notetype current, so relying on that would let one flow's add (a
+    vocabulary card, with its many-field notetype) silently break the next front/back add.
+
+    See docs/ankiweb-api.md for the `editor/get-info-for-adding` → `editor/get-notetype-fields` →
+    `editor/add-or-update` chain.
     """
 
-    def __init__(self, svc: AnkiSvcClient) -> None:
+    def __init__(self, config: AnkiWebCardGatewayConfig, svc: AnkiSvcClient) -> None:
+        self._config = config
         self._svc = svc
 
     @override
@@ -33,11 +50,28 @@ class AnkiWebCardGateway(CardGateway):
             logger.warning("The selected deck %s no longer exists in AnkiWeb", deck_id)
             raise AnkiDeckNotFoundError
 
+        notetype_id = next(
+            (notetype.id for notetype in info.notetypes if notetype.name == self._config.notetype_name), None
+        )
+        if notetype_id is None:
+            available = ", ".join(notetype.name for notetype in info.notetypes)
+            logger.warning("The configured card notetype is missing from AnkiWeb: %s", self._config.notetype_name)
+            raise AnkiTemplateTargetNotFoundError(
+                f"Notetype '{self._config.notetype_name}' not found in AnkiWeb. Available notetypes: {available}"
+            )
+
+        fields_response = await self._svc.post(
+            "/svc/editor/get-notetype-fields",
+            GetNotetypeFieldsRequest(notetype_id=notetype_id),
+            GetNotetypeFieldsResponse(),
+            error=AnkiCardCreationError,
+        )
+
         return AddTarget(
             deck_id=deck_id,
-            notetype_id=info.current_notetype_id,
+            notetype_id=notetype_id,
             deck_name=deck_name,
-            field_count=len(info.fields),
+            field_count=len(fields_response.fields),
         )
 
     @override

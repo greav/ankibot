@@ -35,6 +35,7 @@ from ankibot.application.add_snippet_cards import (
 from ankibot.application.exceptions.anki import (
     AnkiDeckNotFoundError,
     AnkiSessionExpiredError,
+    AnkiTemplateTargetNotFoundError,
     AnkiUnsupportedNotetypeError,
     SnippetCardsPartiallySavedError,
 )
@@ -75,8 +76,8 @@ GENERATOR_UNAVAILABLE = "The card generator is unavailable. Please try again lat
 GENERATION_FAILED = "Couldn't generate cards from that snippet. Try again, or send a different passage."
 NOTHING_TO_LEARN = "Couldn't find anything card-worthy in that snippet. Try a different passage."
 UNSUPPORTED_NOTETYPE = (
-    "AnkiWeb's current notetype isn't set up for a simple front/back card. "
-    "Switch to a two-field notetype (e.g. Basic) in AnkiWeb's editor and try again."
+    "The configured notetype isn't a simple front/back one. "
+    "Point the bot's config at a two-field notetype (e.g. Basic) and try again."
 )
 GENERIC_FAILURE = "Failed to add the cards to AnkiWeb. Please try again later."
 NOTHING_SELECTED = "Select at least one card."
@@ -218,6 +219,10 @@ async def _send_preview(
     except AnkiUnsupportedNotetypeError:
         await state.clear()
         await message.answer(UNSUPPORTED_NOTETYPE)
+        return
+    except AnkiTemplateTargetNotFoundError as error:
+        await state.clear()
+        await message.answer(str(error))
         return
     except ApplicationError as error:
         logger.warning("Failed to generate snippet cards: %s", error)
@@ -591,6 +596,9 @@ async def _save(
     except AnkiUnsupportedNotetypeError:
         await state.clear()
         await edit_into(callback, UNSUPPORTED_NOTETYPE)
+    except AnkiTemplateTargetNotFoundError as error:
+        await state.clear()
+        await edit_into(callback, str(error))
     except SnippetCardsPartiallySavedError as error:
         await state.clear()
         await edit_into(callback, format_partial_save(error))

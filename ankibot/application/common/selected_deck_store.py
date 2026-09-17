@@ -20,6 +20,11 @@ class SelectedDeckStore(Protocol):
         """Remember ``deck_id`` as the user's target deck."""
         raise NotImplementedError
 
+    @abstractmethod
+    async def clear_deck(self, user_id: int) -> None:
+        """Forget the user's target deck, so the next card asks for one; a no-op when none is set."""
+        raise NotImplementedError
+
 
 async def chosen_deck(store: SelectedDeckStore, user_id: int) -> int:
     """The deck ``user_id`` picked, or ``NoDeckSelectedError`` when they have not picked one.

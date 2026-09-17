@@ -1,5 +1,6 @@
 import logging
 from dataclasses import dataclass
+from enum import StrEnum
 
 import httpx
 from google.protobuf.message import Message
@@ -11,7 +12,20 @@ from ankibot.infra.anki.protobuf import PROTOBUF_CONTENT_TYPE, parse_or_raise
 
 @dataclass(frozen=True, kw_only=True)
 class AnkiSvcClientConfig:
+    ankiweb_base_url: str
     ankiuser_base_url: str
+
+
+class AnkiHost(StrEnum):
+    """The two origins AnkiWeb splits its /svc endpoints across; each has its own session cookie.
+
+    Account, deck management and the shared catalog live on ankiweb.net; study and note editing
+    live on ankiuser.net. The split is a security boundary (card HTML runs on ankiuser.net), so a
+    call sent to the wrong host is refused, not redirected.
+    """
+
+    ANKIWEB = "ankiweb"
+    ANKIUSER = "ankiuser"
 
 
 logger = logging.getLogger(__name__)
@@ -37,10 +51,15 @@ class AnkiSvcClient:
         response: M,
         *,
         error: type[ApplicationError],
+        host: AnkiHost = AnkiHost.ANKIUSER,
     ) -> M:
-        """Send ``request`` to ``path`` and parse the reply into ``response``."""
+        """Send ``request`` to ``path`` on ``host`` and parse the reply into ``response``.
+
+        ``host`` defaults to ankiuser.net because that is where the editor endpoints every card
+        gateway calls live; the deck-management gateway names ankiweb.net explicitly.
+        """
         try:
-            return await self._post(path, request, response, error=error)
+            return await self._post(path, request, response, error=error, host=host)
         except AnkiSessionExpiredError:
             logger.info("AnkiWeb session expired at %s", path)
             raise
@@ -55,10 +74,11 @@ class AnkiSvcClient:
         response: M,
         *,
         error: type[ApplicationError],
+        host: AnkiHost,
     ) -> M:
         try:
             http_response = await self._client.post(
-                f"{self._config.ankiuser_base_url}{path}",
+                f"{self._base_url(host)}{path}",
                 content=request.SerializeToString(),
                 headers={"Content-Type": PROTOBUF_CONTENT_TYPE},
             )
@@ -75,3 +95,8 @@ class AnkiSvcClient:
             http_response.content,
             error(f"AnkiWeb {path} returned a non-protobuf response"),
         )
+
+    def _base_url(self, host: AnkiHost) -> str:
+        if host is AnkiHost.ANKIWEB:
+            return self._config.ankiweb_base_url
+        return self._config.ankiuser_base_url

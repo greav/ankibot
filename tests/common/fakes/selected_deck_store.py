@@ -22,3 +22,7 @@ class FakeSelectedDeckStore(SelectedDeckStore):
     @override
     async def set_deck(self, user_id: int, deck_id: int) -> None:
         self.decks[user_id] = deck_id
+
+    @override
+    async def clear_deck(self, user_id: int) -> None:
+        self.decks.pop(user_id, None)

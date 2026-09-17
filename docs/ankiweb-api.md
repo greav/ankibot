@@ -35,16 +35,16 @@ ______________________________________________________________________
 
 ## Decks — deck management & publishing
 
-| Method | URL                           | Purpose                                               | Request                      | Response                  | Sliced |
-| ------ | ----------------------------- | ----------------------------------------------------- | ---------------------------- | ------------------------- | ------ |
-| POST   | `/svc/decks/deck-list-info`   | Deck tree with counts and collection/media sizes      | `DeckListInfoRequest`        | `DeckListInfoResponse`    | —      |
-| POST   | `/svc/decks/create-deck`      | Create a deck                                         | `CreateDeckRequest`          | `CreateDeckResponse` `{}` | —      |
-| POST   | `/svc/decks/rename-deck`      | Rename a deck                                         | `RenameDeckRequest`          | `RenameDeckResponse`      | —      |
-| POST   | `/svc/decks/remove-deck`      | Delete a deck                                         | `RemoveDeckRequest`          | `RemoveDeckResponse` `{}` | —      |
-| POST   | `/svc/decks/select-deck`      | Set the current (active) deck                         | `SelectDeckRequest`          | `SelectDeckResponse` `{}` | —      |
-| POST   | `/svc/decks/deck-share-info`  | Metadata for the deck-publishing form                 | `DeckShareInfoRequest`       | `DeckShareInfoResponse`   | —      |
-| POST   | `/svc/decks/deck-share`       | Publish (share) a deck                                | `DeckShareRequest`           | `DeckShareResponse` `{}`  | —      |
-| POST   | `/svc/decks/deck-share-state` | Poll the publishing state (WAITING / IN_PROGRESS / …) | `DeckShareStateRequest` `{}` | `DeckShareStateResponse`  | —      |
+| Method | URL                           | Purpose                                               | Request                      | Response                  | Sliced                    |
+| ------ | ----------------------------- | ----------------------------------------------------- | ---------------------------- | ------------------------- | ------------------------- |
+| POST   | `/svc/decks/deck-list-info`   | Deck tree with counts and collection/media sizes      | `DeckListInfoRequest`        | `DeckListInfoResponse`    | —                         |
+| POST   | `/svc/decks/create-deck`      | Create a deck                                         | `CreateDeckRequest`          | `CreateDeckResponse` `{}` | `decks/create_deck.proto` |
+| POST   | `/svc/decks/rename-deck`      | Rename a deck                                         | `RenameDeckRequest`          | `RenameDeckResponse`      | —                         |
+| POST   | `/svc/decks/remove-deck`      | Delete a deck                                         | `RemoveDeckRequest`          | `RemoveDeckResponse` `{}` | `decks/remove_deck.proto` |
+| POST   | `/svc/decks/select-deck`      | Set the current (active) deck                         | `SelectDeckRequest`          | `SelectDeckResponse` `{}` | —                         |
+| POST   | `/svc/decks/deck-share-info`  | Metadata for the deck-publishing form                 | `DeckShareInfoRequest`       | `DeckShareInfoResponse`   | —                         |
+| POST   | `/svc/decks/deck-share`       | Publish (share) a deck                                | `DeckShareRequest`           | `DeckShareResponse` `{}`  | —                         |
+| POST   | `/svc/decks/deck-share-state` | Poll the publishing state (WAITING / IN_PROGRESS / …) | `DeckShareStateRequest` `{}` | `DeckShareStateResponse`  | —                         |
 
 ## Study — the review loop
 

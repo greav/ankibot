@@ -18,4 +18,4 @@ def anki_config() -> AnkiWebAuthenticatorConfig:
 @pytest.fixture(scope="session")
 def svc_config() -> AnkiSvcClientConfig:
     """AnkiSvcClient config, pointed at the same obviously-fake host as ``anki_config``."""
-    return AnkiSvcClientConfig(ankiuser_base_url="https://ankiuser.net")
+    return AnkiSvcClientConfig(ankiweb_base_url="https://ankiweb.net", ankiuser_base_url="https://ankiuser.net")

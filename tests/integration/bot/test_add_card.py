@@ -12,7 +12,7 @@ import logging
 import pytest
 from aiogram import Dispatcher
 from aiogram.methods import SendMessage
-from aiogram.types import Update
+from aiogram.types import InlineKeyboardMarkup, Update
 
 from ankibot.application.exceptions.anki import (
     AnkiCardCreationError,
@@ -323,3 +323,18 @@ async def test_user_cannot_add_a_card_without_a_chosen_deck(
 
     # Assert
     assert session.last_answer == "Choose a deck with /decks first."
+
+
+async def test_user_cannot_delete_a_deck_while_adding_a_card(dispatcher: Dispatcher) -> None:
+    """The picker /addcard opens only chooses: no delete or new-deck buttons sit one tap from a card."""
+    # Arrange
+    session = RecordingSession()
+    bot = make_bot(session)
+
+    # Act
+    await dispatcher.feed_update(bot, Update(update_id=1, message=make_message(bot, text="/addcard")))
+
+    # Assert
+    sent = next(request for request in reversed(session.requests) if isinstance(request, SendMessage))
+    assert isinstance(sent.reply_markup, InlineKeyboardMarkup)
+    assert [button.text for row in sent.reply_markup.inline_keyboard for button in row] == ["✓ Default", "Spanish"]

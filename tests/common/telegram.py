@@ -15,7 +15,7 @@ from aiogram import Bot
 from aiogram.client.session.base import BaseSession
 from aiogram.methods import EditMessageText, GetFile, SendMessage, TelegramMethod
 from aiogram.methods.base import TelegramType
-from aiogram.types import CallbackQuery, Chat, File, Message, PhotoSize, User
+from aiogram.types import CallbackQuery, Chat, File, Message, MessageEntity, PhotoSize, User
 
 TEST_BOT_TOKEN = "42:TEST"
 TEST_CHAT_ID = 1
@@ -135,6 +135,15 @@ class RecordingSession(BaseSession):
             msg = "Handler sent no reply"
             raise AssertionError(msg)
         return self.answers[-1]
+
+    @property
+    def last_answer_entities(self) -> list[MessageEntity]:
+        """The formatting entities on the most recent reply; fails loudly when the handler stayed silent."""
+        sent = [request for request in self.requests if isinstance(request, SendMessage)]
+        if not sent:
+            msg = "Handler sent no reply"
+            raise AssertionError(msg)
+        return list(sent[-1].entities or [])
 
 
 def make_bot(session: RecordingSession) -> Bot:

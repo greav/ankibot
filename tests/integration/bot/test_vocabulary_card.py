@@ -11,7 +11,7 @@ from typing import Literal
 import pytest
 from aiogram import Dispatcher
 from aiogram.methods import EditMessageReplyMarkup, SendMessage
-from aiogram.types import InlineKeyboardMarkup, Update
+from aiogram.types import InlineKeyboardMarkup, MessageEntity, Update
 
 from ankibot.application.exceptions.anki import (
     AnkiCardCreationError,
@@ -40,7 +40,7 @@ from tests.common.telegram import (
 DEFAULT_DECK_ID = 1
 
 EXPECTED_PREVIEW = (
-    "Add to English Words V2?\n\nWord: serendipity\nMeaning: a pleasant surprise\nExample: What a serendipity!"
+    "Add to English Words V2?\n\nWord\nserendipity\n\nMeaning\na pleasant surprise\n\nExample\nWhat a serendipity!"
 )
 
 
@@ -142,7 +142,7 @@ async def tap_action(
 
 
 async def test_user_can_generate_a_card_preview(dispatcher: Dispatcher) -> None:
-    """A plain word produces a preview naming the deck and every field the notetype carries."""
+    """A plain word produces a preview naming the deck and every field the notetype carries, names in bold."""
     # Arrange
     session = RecordingSession()
 
@@ -150,9 +150,12 @@ async def test_user_can_generate_a_card_preview(dispatcher: Dispatcher) -> None:
     await send_word(dispatcher, session, "serendipity", chat_id=1, user_id=1)
 
     # Assert
-    assert session.last_answer == (
-        "Add to English Words V2?\n\nWord: serendipity\nMeaning: a pleasant surprise\nExample: What a serendipity!"
-    )
+    assert session.last_answer == EXPECTED_PREVIEW
+    assert session.last_answer_entities == [
+        MessageEntity(type="bold", offset=26, length=4),
+        MessageEntity(type="bold", offset=44, length=7),
+        MessageEntity(type="bold", offset=73, length=7),
+    ]
 
 
 async def test_user_can_save_the_generated_card(dispatcher: Dispatcher) -> None:
@@ -372,7 +375,7 @@ async def test_user_can_send_a_long_word_through_the_command(dispatcher: Dispatc
     # Assert
     assert session.answers[0] == "Send a word to make a card from, or a screenshot of the text it appears in."
     assert session.last_answer == (
-        "Add to English Words V2?\n\nWord: serendipity\nMeaning: a pleasant surprise\nExample: What a serendipity!"
+        "Add to English Words V2?\n\nWord\nserendipity\n\nMeaning\na pleasant surprise\n\nExample\nWhat a serendipity!"
     )
 
 
@@ -401,7 +404,7 @@ async def test_user_can_switch_from_awaiting_a_snippet_to_a_word(dispatcher: Dis
 
     # Assert
     assert session.last_answer == (
-        "Add to English Words V2?\n\nWord: serendipity\nMeaning: a pleasant surprise\nExample: What a serendipity!"
+        "Add to English Words V2?\n\nWord\nserendipity\n\nMeaning\na pleasant surprise\n\nExample\nWhat a serendipity!"
     )
 
 
@@ -446,7 +449,7 @@ async def test_user_can_regenerate_a_word_card_with_feedback(
     # Assert
     assert asked == ASK_FEEDBACK
     assert session.last_answer == (
-        "Add to English Words V2?\n\nWord: serendipity\nMeaning: a lucky find\nExample: Pure serendipity."
+        "Add to English Words V2?\n\nWord\nserendipity\n\nMeaning\na lucky find\n\nExample\nPure serendipity."
     )
 
 

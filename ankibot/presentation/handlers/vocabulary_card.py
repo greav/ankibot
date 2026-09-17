@@ -21,6 +21,7 @@ from aiogram.filters import Command, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message
+from aiogram.utils.formatting import Bold, Text
 from dishka import FromDishka
 
 from ankibot.application.add_vocabulary_word import (
@@ -73,10 +74,20 @@ class WordCard(StatesGroup):
     waiting_for_feedback = State()
 
 
-def format_card_preview(deck_name: str, fields: Sequence[tuple[str, str]]) -> str:
-    """Render the generated card as the preview the user confirms."""
-    lines = "\n".join(f"{name}: {value}" for name, value in fields)
-    return f"Add to {deck_name}?\n\n{lines}"
+def format_card_preview(deck_name: str, fields: Sequence[tuple[str, str]]) -> Text:
+    """Render the generated card as the preview the user confirms.
+
+    Each field is its own paragraph: the name in bold on a line of its own, the value under it. A
+    name that opened the value's line got lost once the value wrapped, and without the blank line
+    the fields ran together into one block.
+
+    Built as entities rather than markup: the values are model output, so they may carry anything
+    a parse mode would trip over, and entities leave the text itself unparsed.
+    """
+    preview = Text("Add to ", deck_name, "?")
+    for name, value in fields:
+        preview += Text("\n\n", Bold(name), "\n", value)
+    return preview
 
 
 async def _clear_previous_keyboard(message: Message, state: FSMContext) -> None:
@@ -155,7 +166,7 @@ async def _send_preview(
         return
 
     preview = await message.answer(
-        format_card_preview(result.deck_name, list(result.fields)),
+        **format_card_preview(result.deck_name, list(result.fields)).as_kwargs(),
         reply_markup=generated_card_keyboard(),
     )
     await state.set_state(WordCard.confirming)

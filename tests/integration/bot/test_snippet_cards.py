@@ -11,7 +11,7 @@ from typing import Literal
 import pytest
 from aiogram import Dispatcher
 from aiogram.methods import AnswerCallbackQuery, EditMessageReplyMarkup, SendMessage
-from aiogram.types import Update
+from aiogram.types import MessageEntity, Update
 
 from ankibot.application.add_snippet_cards import DraftCard
 from ankibot.application.exceptions.anki import AnkiSessionExpiredError
@@ -121,7 +121,7 @@ async def tap_action(
 
 
 async def test_user_can_generate_cards_from_a_long_text(dispatcher: Dispatcher) -> None:
-    """A pasted passage produces a preview naming the deck and listing every generated card."""
+    """A pasted passage produces a preview naming the deck and listing every generated card, fronts in bold."""
     # Arrange
     session = RecordingSession()
 
@@ -130,6 +130,10 @@ async def test_user_can_generate_cards_from_a_long_text(dispatcher: Dispatcher) 
 
     # Assert
     assert session.last_answer == EXPECTED_PREVIEW
+    assert session.last_answer_entities == [
+        MessageEntity(type="bold", offset=25, length=27),
+        MessageEntity(type="bold", offset=80, length=51),
+    ]
 
 
 async def test_user_can_save_the_generated_cards(dispatcher: Dispatcher) -> None:
@@ -242,7 +246,7 @@ async def test_short_word_is_still_a_vocabulary_lookup(dispatcher: Dispatcher) -
 
     # Assert
     assert session.last_answer == (
-        "Add to English Words V2?\n\nWord: serendipity\nMeaning: a pleasant surprise\nExample: What a serendipity!"
+        "Add to English Words V2?\n\nWord\nserendipity\n\nMeaning\na pleasant surprise\n\nExample\nWhat a serendipity!"
     )
 
 

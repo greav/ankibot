@@ -35,11 +35,34 @@ def test_format_cards_preview_can_render_every_card_in_order() -> None:
     result = format_cards_preview("Python", cards)
 
     # Assert
-    assert result == [
+    assert [message.render()[0] for message in result] == [
         "Add 2 cards to Python?\n\n"
         "1. What does GIL stand for?\n— Global Interpreter Lock\n\n"
         "2. Which lock serializes Python bytecode execution?\n— The GIL"
     ]
+
+
+def test_format_cards_preview_can_bold_every_numbered_front_and_nothing_else() -> None:
+    """Each card's number and front arrive as one bold entity over the plain text; the backs stay unformatted."""
+    # Arrange
+    cards = [DraftCard(front="Q1", back="A1"), DraftCard(front="Q2", back="A2")]
+
+    # Act
+    text, entities = format_cards_preview("Python", cards)[0].render()
+
+    # Assert
+    assert [text[entity.offset : entity.offset + entity.length] for entity in entities] == ["1. Q1", "2. Q2"]
+    assert all(entity.type == "bold" for entity in entities)
+
+
+def test_format_cards_preview_cannot_let_a_card_be_parsed_as_markup() -> None:
+    """A card carrying markup-like characters reaches the text verbatim, with no parse mode set."""
+    # Act
+    kwargs = format_cards_preview("Python", [DraftCard(front="<b>Q</b>", back="*A* & `B`")])[0].as_kwargs()
+
+    # Assert
+    assert kwargs["text"] == "Add 1 card to Python?\n\n1. <b>Q</b>\n— *A* & `B`"
+    assert kwargs["parse_mode"] is None
 
 
 def test_format_cards_preview_can_count_a_single_card_in_the_singular() -> None:
@@ -48,7 +71,7 @@ def test_format_cards_preview_can_count_a_single_card_in_the_singular() -> None:
     result = format_cards_preview("Python", [DraftCard(front="Q", back="A")])
 
     # Assert
-    assert result == ["Add 1 card to Python?\n\n1. Q\n— A"]
+    assert [message.render()[0] for message in result] == ["Add 1 card to Python?\n\n1. Q\n— A"]
 
 
 def test_format_cards_preview_cannot_exceed_telegram_message_limit() -> None:
@@ -62,7 +85,7 @@ def test_format_cards_preview_cannot_exceed_telegram_message_limit() -> None:
     # Assert
     assert len(result) > 1
     assert all(len(message) <= TELEGRAM_MESSAGE_LIMIT for message in result)
-    joined = "\n\n".join(result)
+    joined = "\n\n".join(message.render()[0] for message in result)
     for index in range(8):
         assert f"Question {index} " in joined
 

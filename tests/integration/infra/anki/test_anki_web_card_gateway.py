@@ -8,38 +8,50 @@ from ankibot.application.exceptions.anki import (
     AnkiCardCreationError,
     AnkiDeckNotFoundError,
     AnkiSessionExpiredError,
+    AnkiTemplateTargetNotFoundError,
 )
-from ankibot.infra.anki.card_gateway import AnkiWebCardGateway
+from ankibot.infra.anki.card_gateway import AnkiWebCardGateway, AnkiWebCardGatewayConfig
 from ankibot.infra.anki.svc import AnkiSvcClient, AnkiSvcClientConfig
 from ankiweb.common_pb2 import DeckNameId, Notetype, NotetypeNameId, UInt32
 from ankiweb.editor.add_or_update_pb2 import AddOrUpdateRequest, AddOrUpdateResponse
 from ankiweb.editor.get_info_for_adding_pb2 import GetInfoForAddingResponse
+from ankiweb.editor.get_notetype_fields_pb2 import GetNotetypeFieldsResponse
 from tests.common.transport import Handler, client_for
 
 DECK_ID = 42
-NOTETYPE_ID = 7
 DECK_NAME = "Spanish"
+OTHER_DECK_ID = 43
+OTHER_DECK_NAME = "French"
+NOTETYPE_ID = 7
+NOTETYPE_NAME = "Basic"
+# The notetype AnkiWeb's editor reports as current: the one the last add used, whatever it was.
+CURRENT_NOTETYPE_ID = 8
+CURRENT_NOTETYPE_NAME = "English Words Context"
 BASIC_FIELDS = [Notetype.Field(ord=UInt32(val=0), name="Front"), Notetype.Field(ord=UInt32(val=1), name="Back")]
+CONFIG = AnkiWebCardGatewayConfig(notetype_name=NOTETYPE_NAME)
 
 
-def info_response(*, fields: list[Notetype.Field] = BASIC_FIELDS) -> bytes:
+def info_response() -> bytes:
     return GetInfoForAddingResponse(
-        notetypes=[NotetypeNameId(id=NOTETYPE_ID, name="Basic")],
+        notetypes=[
+            NotetypeNameId(id=NOTETYPE_ID, name=NOTETYPE_NAME),
+            NotetypeNameId(id=CURRENT_NOTETYPE_ID, name=CURRENT_NOTETYPE_NAME),
+        ],
         decks=[DeckNameId(id=DECK_ID, name=DECK_NAME), DeckNameId(id=OTHER_DECK_ID, name=OTHER_DECK_NAME)],
         current_deck_id=DECK_ID,
-        current_notetype_id=NOTETYPE_ID,
-        fields=fields,
+        current_notetype_id=CURRENT_NOTETYPE_ID,
     ).SerializeToString()
 
 
-OTHER_DECK_ID = 43
-OTHER_DECK_NAME = "French"
+def fields_response(fields: list[Notetype.Field] = BASIC_FIELDS) -> bytes:  # noqa: B006
+    return GetNotetypeFieldsResponse(fields=fields).SerializeToString()
 
 
 def build_handler(
     *,
     info_status_code: int = 200,
     info_content: bytes | None = None,
+    fields_content: bytes | None = None,
     add_status_code: int = 200,
     add_content: bytes | None = None,
 ) -> Handler:
@@ -51,6 +63,10 @@ def build_handler(
             content = info_content if info_content is not None else info_response()
             return httpx.Response(info_status_code, content=content)
 
+        if request.url.path == "/svc/editor/get-notetype-fields":
+            content = fields_content if fields_content is not None else fields_response()
+            return httpx.Response(200, content=content)
+
         if request.url.path == "/svc/editor/add-or-update":
             content = add_content if add_content is not None else AddOrUpdateResponse().SerializeToString()
             return httpx.Response(add_status_code, content=content)
@@ -60,11 +76,15 @@ def build_handler(
     return handler
 
 
+def make_gateway(client: httpx.AsyncClient, svc_config: AnkiSvcClientConfig) -> AnkiWebCardGateway:
+    return AnkiWebCardGateway(CONFIG, AnkiSvcClient(svc_config, client))
+
+
 async def test_gateway_can_read_the_add_target_of_a_chosen_deck(svc_config: AnkiSvcClientConfig) -> None:
-    """add_target resolves the chosen deck's name and the notetype AnkiWeb's editor reports as current."""
+    """add_target resolves the chosen deck's name and the configured notetype, not the editor's current one."""
     # Arrange
     async with client_for(build_handler()) as client:
-        gateway = AnkiWebCardGateway(AnkiSvcClient(svc_config, client))
+        gateway = make_gateway(client, svc_config)
 
         # Act
         target = await gateway.add_target(DECK_ID)
@@ -74,21 +94,48 @@ async def test_gateway_can_read_the_add_target_of_a_chosen_deck(svc_config: Anki
 
 
 async def test_gateway_can_read_a_notetypes_field_count(svc_config: AnkiSvcClientConfig) -> None:
-    """field_count reflects the current notetype's actual field list, not a hardcoded assumption."""
+    """field_count reflects the configured notetype's actual field list, not a hardcoded assumption."""
     # Arrange
     fields = [*BASIC_FIELDS, Notetype.Field(ord=UInt32(val=2), name="Extra")]
-    handler = build_handler(info_content=info_response(fields=fields))
+    handler = build_handler(fields_content=fields_response(fields))
 
     # Act
     async with client_for(handler) as client:
-        gateway = AnkiWebCardGateway(AnkiSvcClient(svc_config, client))
+        gateway = make_gateway(client, svc_config)
         target = await gateway.add_target(DECK_ID)
 
     # Assert
     assert target.field_count == 3
 
 
-async def test_gateway_can_add_a_card_to_the_current_target(svc_config: AnkiSvcClientConfig) -> None:
+async def test_gateway_cannot_resolve_an_unknown_notetype_name(svc_config: AnkiSvcClientConfig) -> None:
+    """A configured notetype name absent from the account names the notetypes that do exist."""
+    # Arrange
+    gateway_config = AnkiWebCardGatewayConfig(notetype_name="Missing Notetype")
+
+    # Act / Assert
+    async with client_for(build_handler()) as client:
+        gateway = AnkiWebCardGateway(gateway_config, AnkiSvcClient(svc_config, client))
+        with pytest.raises(AnkiTemplateTargetNotFoundError) as excinfo:
+            await gateway.add_target(DECK_ID)
+
+    assert NOTETYPE_NAME in str(excinfo.value)
+    assert CURRENT_NOTETYPE_NAME in str(excinfo.value)
+
+
+async def test_gateway_cannot_read_a_notetypes_fields_served_as_html(svc_config: AnkiSvcClientConfig) -> None:
+    """An HTML page served with 200 for get-notetype-fields fails loudly, not as a raw DecodeError."""
+    # Arrange
+    handler = build_handler(fields_content=b"<html><body>maintenance</body></html>")
+
+    # Act / Assert
+    async with client_for(handler) as client:
+        gateway = make_gateway(client, svc_config)
+        with pytest.raises(AnkiCardCreationError):
+            await gateway.add_target(DECK_ID)
+
+
+async def test_gateway_can_add_a_card_to_the_target(svc_config: AnkiSvcClientConfig) -> None:
     """add_card posts the note with the ids add_target reported, to the ankiuser host."""
     # Arrange
     requests: list[httpx.Request] = []
@@ -97,10 +144,12 @@ async def test_gateway_can_add_a_card_to_the_current_target(svc_config: AnkiSvcC
         requests.append(request)
         if request.url.path == "/svc/editor/get-info-for-adding":
             return httpx.Response(200, content=info_response())
+        if request.url.path == "/svc/editor/get-notetype-fields":
+            return httpx.Response(200, content=fields_response())
         return httpx.Response(200, content=AddOrUpdateResponse().SerializeToString())
 
     async with client_for(handler) as client:
-        gateway = AnkiWebCardGateway(AnkiSvcClient(svc_config, client))
+        gateway = make_gateway(client, svc_config)
         target = await gateway.add_target(DECK_ID)
 
         # Act
@@ -117,6 +166,30 @@ async def test_gateway_can_add_a_card_to_the_current_target(svc_config: AnkiSvcC
     assert parsed.add.deck_id == DECK_ID
 
 
+async def test_gateway_can_render_line_breaks_as_html_for_ankiweb(svc_config: AnkiSvcClientConfig) -> None:
+    """A multi-line side reaches AnkiWeb with ``<br>`` between the lines, since a field is HTML."""
+    # Arrange
+    requests: list[httpx.Request] = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return await build_handler()(request)
+
+    target = AddTarget(deck_id=DECK_ID, notetype_id=NOTETYPE_ID, deck_name=DECK_NAME, field_count=2)
+
+    async with client_for(handler) as client:
+        gateway = make_gateway(client, svc_config)
+
+        # Act
+        await gateway.add_card(target, "What is x?", "First.\nSecond & <third>")
+
+    # Assert
+    add_request = next(request for request in requests if request.url.path == "/svc/editor/add-or-update")
+    parsed = AddOrUpdateRequest()
+    parsed.ParseFromString(add_request.content)
+    assert list(parsed.fields) == ["What is x?", "First.<br>Second &amp; &lt;third&gt;"]
+
+
 async def test_gateway_cannot_read_the_add_target_on_an_expired_session(
     svc_config: AnkiSvcClientConfig,
 ) -> None:
@@ -126,7 +199,7 @@ async def test_gateway_cannot_read_the_add_target_on_an_expired_session(
 
     # Act / Assert
     async with client_for(handler) as client:
-        gateway = AnkiWebCardGateway(AnkiSvcClient(svc_config, client))
+        gateway = make_gateway(client, svc_config)
         with pytest.raises(AnkiSessionExpiredError):
             await gateway.add_target(DECK_ID)
 
@@ -139,7 +212,7 @@ async def test_gateway_cannot_add_a_card_on_an_expired_session(svc_config: AnkiS
 
     # Act / Assert
     async with client_for(handler) as client:
-        gateway = AnkiWebCardGateway(AnkiSvcClient(svc_config, client))
+        gateway = make_gateway(client, svc_config)
         with pytest.raises(AnkiSessionExpiredError):
             await gateway.add_card(target, "front", "back")
 
@@ -153,7 +226,7 @@ async def test_gateway_cannot_read_the_add_target_on_an_http_error(
 
     # Act / Assert
     async with client_for(handler) as client:
-        gateway = AnkiWebCardGateway(AnkiSvcClient(svc_config, client))
+        gateway = make_gateway(client, svc_config)
         with pytest.raises(AnkiCardCreationError):
             await gateway.add_target(DECK_ID)
 
@@ -167,7 +240,7 @@ async def test_gateway_cannot_reach_an_unreachable_ankiweb(svc_config: AnkiSvcCl
 
     # Act / Assert
     async with client_for(handler) as client:
-        gateway = AnkiWebCardGateway(AnkiSvcClient(svc_config, client))
+        gateway = make_gateway(client, svc_config)
         with pytest.raises(AnkiCardCreationError):
             await gateway.add_target(DECK_ID)
 
@@ -179,7 +252,7 @@ async def test_gateway_cannot_read_an_add_target_served_as_html(svc_config: Anki
 
     # Act / Assert
     async with client_for(handler) as client:
-        gateway = AnkiWebCardGateway(AnkiSvcClient(svc_config, client))
+        gateway = make_gateway(client, svc_config)
         with pytest.raises(AnkiCardCreationError):
             await gateway.add_target(DECK_ID)
 
@@ -193,7 +266,7 @@ async def test_gateway_cannot_leak_card_text_into_the_logs(
     target = AddTarget(deck_id=DECK_ID, notetype_id=NOTETYPE_ID, deck_name=DECK_NAME, field_count=2)
 
     async with client_for(build_handler()) as client:
-        gateway = AnkiWebCardGateway(AnkiSvcClient(svc_config, client))
+        gateway = make_gateway(client, svc_config)
 
         # Act
         with caplog.at_level(logging.DEBUG):
@@ -208,7 +281,7 @@ async def test_gateway_can_target_an_explicitly_chosen_deck(svc_config: AnkiSvcC
     """A deck id names that deck as the target, whichever one AnkiWeb's editor calls current."""
     # Arrange
     async with client_for(build_handler()) as client:
-        gateway = AnkiWebCardGateway(AnkiSvcClient(svc_config, client))
+        gateway = make_gateway(client, svc_config)
 
         # Act
         target = await gateway.add_target(OTHER_DECK_ID)
@@ -225,6 +298,6 @@ async def test_gateway_cannot_target_a_deck_the_account_no_longer_has(
     """A remembered deck deleted in AnkiWeb is reported as missing, not silently swapped for another."""
     # Arrange / Act / Assert
     async with client_for(build_handler()) as client:
-        gateway = AnkiWebCardGateway(AnkiSvcClient(svc_config, client))
+        gateway = make_gateway(client, svc_config)
         with pytest.raises(AnkiDeckNotFoundError):
             await gateway.add_target(999)

@@ -11,10 +11,10 @@ from typing import Literal
 import pytest
 from aiogram import Dispatcher
 from aiogram.methods import AnswerCallbackQuery, EditMessageReplyMarkup, SendMessage
-from aiogram.types import Update
+from aiogram.types import MessageEntity, Update
 
 from ankibot.application.add_snippet_cards import DraftCard
-from ankibot.application.exceptions.anki import AnkiSessionExpiredError
+from ankibot.application.exceptions.anki import AnkiSessionExpiredError, AnkiTemplateTargetNotFoundError
 from ankibot.application.exceptions.generation import CardGenerationUnavailableError
 from ankibot.presentation.handlers.snippet_cards import ASK_FEEDBACK, NOT_FEEDBACK, NOTHING_SELECTED
 from ankibot.presentation.keyboards.decks import DeckCallback
@@ -121,7 +121,7 @@ async def tap_action(
 
 
 async def test_user_can_generate_cards_from_a_long_text(dispatcher: Dispatcher) -> None:
-    """A pasted passage produces a preview naming the deck and listing every generated card."""
+    """A pasted passage produces a preview naming the deck and listing every generated card, fronts in bold."""
     # Arrange
     session = RecordingSession()
 
@@ -130,6 +130,10 @@ async def test_user_can_generate_cards_from_a_long_text(dispatcher: Dispatcher) 
 
     # Assert
     assert session.last_answer == EXPECTED_PREVIEW
+    assert session.last_answer_entities == [
+        MessageEntity(type="bold", offset=25, length=27),
+        MessageEntity(type="bold", offset=80, length=51),
+    ]
 
 
 async def test_user_can_save_the_generated_cards(dispatcher: Dispatcher) -> None:
@@ -242,7 +246,7 @@ async def test_short_word_is_still_a_vocabulary_lookup(dispatcher: Dispatcher) -
 
     # Assert
     assert session.last_answer == (
-        "Add to English Words V2?\n\nWord: serendipity\nMeaning: a pleasant surprise\nExample: What a serendipity!"
+        "Add to English Words V2?\n\nWord\nserendipity\n\nMeaning\na pleasant surprise\n\nExample\nWhat a serendipity!"
     )
 
 
@@ -306,10 +310,25 @@ async def test_user_cannot_generate_cards_without_authenticating(
     assert session.last_answer == "Run /auth first."
 
 
+async def test_user_cannot_generate_cards_when_the_configured_notetype_is_missing(
+    dispatcher: Dispatcher, card_gateway: FakeCardGateway
+) -> None:
+    """A configured notetype absent from the account is reported by name, not as a generic failure."""
+    # Arrange
+    session = RecordingSession()
+    card_gateway.error = AnkiTemplateTargetNotFoundError("distinctive-target-reason")
+
+    # Act
+    await send(dispatcher, session, LONG_TEXT, chat_id=40, user_id=40)
+
+    # Assert
+    assert session.last_answer == "distinctive-target-reason"
+
+
 async def test_user_cannot_generate_cards_for_a_notetype_without_two_fields(
     dispatcher: Dispatcher, card_gateway: FakeCardGateway
 ) -> None:
-    """A notetype that isn't front/back-shaped is named to the user before generation starts."""
+    """A configured notetype that isn't front/back-shaped is named to the user before generation starts."""
     # Arrange
     session = RecordingSession()
     card_gateway.field_count = 8
@@ -319,8 +338,8 @@ async def test_user_cannot_generate_cards_for_a_notetype_without_two_fields(
 
     # Assert
     assert session.last_answer == (
-        "AnkiWeb's current notetype isn't set up for a simple front/back card. "
-        "Switch to a two-field notetype (e.g. Basic) in AnkiWeb's editor and try again."
+        "The configured notetype isn't a simple front/back one. "
+        "Point the bot's config at a two-field notetype (e.g. Basic) and try again."
     )
 
 
@@ -374,6 +393,22 @@ async def test_user_cannot_save_when_the_session_has_expired(
 
     # Assert
     assert session.last_edit == "Run /auth first."
+
+
+async def test_user_cannot_save_when_the_configured_notetype_is_missing(
+    dispatcher: Dispatcher, card_gateway: FakeCardGateway
+) -> None:
+    """A notetype renamed between preview and Save is reported by name, not as a generic failure."""
+    # Arrange
+    session = RecordingSession()
+    await send_snippet(dispatcher, session, LONG_TEXT, chat_id=41, user_id=41)
+    card_gateway.error = AnkiTemplateTargetNotFoundError("distinctive-target-reason")
+
+    # Act
+    await tap_action(dispatcher, session, "save", chat_id=41, user_id=41)
+
+    # Assert
+    assert session.last_edit == "distinctive-target-reason"
 
 
 async def test_user_can_save_only_the_selected_cards(dispatcher: Dispatcher) -> None:

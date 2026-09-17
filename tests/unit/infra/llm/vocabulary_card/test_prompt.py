@@ -52,14 +52,14 @@ def test_response_schema_can_attach_a_hint_as_a_description() -> None:
 def test_response_schema_can_match_a_hint_regardless_of_case_or_whitespace() -> None:
     """A field differing from FIELD_HINTS only in case or surrounding whitespace still matches."""
     # Arrange
-    template = CardTemplate(name="English Words V2", fields=(" word ", "MEANING"))
+    template = CardTemplate(name="English Words V2", fields=(" word ", "SYNONYMS"))
 
     # Act
     schema = response_schema(template)
 
     # Assert
     assert schema["properties"][" word "]["description"] == "the headword, lowercase"
-    assert schema["properties"]["MEANING"]["description"] == "short English definition, under 12 words"
+    assert schema["properties"]["SYNONYMS"]["description"] == "a few close synonyms, separated by semicolons"
 
 
 def test_response_schema_can_reorder_without_changing_anything_else() -> None:

@@ -21,6 +21,7 @@ from aiogram.filters import Command, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message
+from aiogram.utils.formatting import Bold, Text
 from dishka import FromDishka
 
 from ankibot.application.add_snippet_cards import (
@@ -34,6 +35,7 @@ from ankibot.application.add_snippet_cards import (
 from ankibot.application.exceptions.anki import (
     AnkiDeckNotFoundError,
     AnkiSessionExpiredError,
+    AnkiTemplateTargetNotFoundError,
     AnkiUnsupportedNotetypeError,
     SnippetCardsPartiallySavedError,
 )
@@ -74,8 +76,8 @@ GENERATOR_UNAVAILABLE = "The card generator is unavailable. Please try again lat
 GENERATION_FAILED = "Couldn't generate cards from that snippet. Try again, or send a different passage."
 NOTHING_TO_LEARN = "Couldn't find anything card-worthy in that snippet. Try a different passage."
 UNSUPPORTED_NOTETYPE = (
-    "AnkiWeb's current notetype isn't set up for a simple front/back card. "
-    "Switch to a two-field notetype (e.g. Basic) in AnkiWeb's editor and try again."
+    "The configured notetype isn't a simple front/back one. "
+    "Point the bot's config at a two-field notetype (e.g. Basic) and try again."
 )
 GENERIC_FAILURE = "Failed to add the cards to AnkiWeb. Please try again later."
 NOTHING_SELECTED = "Select at least one card."
@@ -91,18 +93,20 @@ class SnippetCards(StatesGroup):
     choosing_deck = State()
 
 
-def format_cards_preview(deck_name: str, cards: Sequence[DraftCard]) -> list[str]:
+def format_cards_preview(deck_name: str, cards: Sequence[DraftCard]) -> list[Text]:
     """Render the generated cards as preview texts, each within Telegram's message limit.
 
     One message when everything fits; the confirmation keyboard goes on the last one either way,
-    its toggles numbered to match the cards listed here.
+    its toggles numbered to match the cards listed here. Each card's front is bold, as entities
+    rather than markup: the cards are model output, so they may carry anything a parse mode would
+    trip over, and entities leave the text itself unparsed.
     """
     count = "1 card" if len(cards) == 1 else f"{len(cards)} cards"
-    current = f"Add {count} to {deck_name}?"
-    messages: list[str] = []
+    current = Text(f"Add {count} to ", deck_name, "?")
+    messages: list[Text] = []
     for index, card in enumerate(cards, start=1):
-        block = f"{index}. {card.front}\n— {card.back}"[:TELEGRAM_MESSAGE_LIMIT]
-        candidate = f"{current}\n\n{block}"
+        block = Text(Bold(f"{index}. {card.front}"), "\n— ", card.back)[:TELEGRAM_MESSAGE_LIMIT]
+        candidate = current + Text("\n\n", block)
         if len(candidate) > TELEGRAM_MESSAGE_LIMIT:
             messages.append(current)
             current = block
@@ -216,6 +220,10 @@ async def _send_preview(
         await state.clear()
         await message.answer(UNSUPPORTED_NOTETYPE)
         return
+    except AnkiTemplateTargetNotFoundError as error:
+        await state.clear()
+        await message.answer(str(error))
+        return
     except ApplicationError as error:
         logger.warning("Failed to generate snippet cards: %s", error)
         await state.clear()
@@ -227,11 +235,11 @@ async def _send_preview(
     # separately from the keyboard's — they coincide unless the preview had to be split.
     header_message_id: int | None = None
     for text in head:
-        sent = await message.answer(text)
+        sent = await message.answer(**text.as_kwargs())
         if header_message_id is None:
             header_message_id = sent.message_id
     selected = [True] * len(result.cards)
-    preview = await message.answer(tail, reply_markup=snippet_cards_keyboard(selected))
+    preview = await message.answer(**tail.as_kwargs(), reply_markup=snippet_cards_keyboard(selected))
     await state.set_state(SnippetCards.confirming)
     await state.update_data(
         {
@@ -489,7 +497,7 @@ async def _readdress_preview(callback: CallbackQuery, state: FSMContext, deck_na
         keyboard = snippet_cards_keyboard(data.get("selected", [True] * len(cards)))
     with contextlib.suppress(TelegramBadRequest):
         await bot.edit_message_text(
-            text=header, chat_id=callback.message.chat.id, message_id=header_message_id, reply_markup=keyboard
+            **header.as_kwargs(), chat_id=callback.message.chat.id, message_id=header_message_id, reply_markup=keyboard
         )
 
 
@@ -588,6 +596,9 @@ async def _save(
     except AnkiUnsupportedNotetypeError:
         await state.clear()
         await edit_into(callback, UNSUPPORTED_NOTETYPE)
+    except AnkiTemplateTargetNotFoundError as error:
+        await state.clear()
+        await edit_into(callback, str(error))
     except SnippetCardsPartiallySavedError as error:
         await state.clear()
         await edit_into(callback, format_partial_save(error))

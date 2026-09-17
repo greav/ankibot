@@ -6,6 +6,7 @@ from typing import override
 from ankibot.application.add_vocabulary_word.ports import VocabularyCardGateway, VocabularyTarget
 from ankibot.application.exceptions.anki import AnkiCardCreationError, AnkiTemplateTargetNotFoundError
 from ankibot.domain.card_template import CardTemplate
+from ankibot.infra.anki.field_html import to_field_html
 from ankibot.infra.anki.svc import AnkiSvcClient
 from ankiweb.editor.add_or_update_pb2 import AddOrUpdateRequest, AddOrUpdateResponse
 from ankiweb.editor.get_info_for_adding_pb2 import GetInfoForAddingRequest, GetInfoForAddingResponse
@@ -81,7 +82,7 @@ class AnkiWebVocabularyCardGateway(VocabularyCardGateway):
     @override
     async def add_note(self, target: VocabularyTarget, fields: Sequence[str]) -> None:
         add_request = AddOrUpdateRequest(
-            fields=list(fields),
+            fields=[to_field_html(value) for value in fields],
             tags="",
             add=AddOrUpdateRequest.AddMode(notetype_id=target.notetype_id, deck_id=target.deck_id),
         )

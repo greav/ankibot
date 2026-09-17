@@ -15,7 +15,7 @@ FRONT_BACK_FIELD_COUNT = 2
 
 @dataclass(frozen=True, kw_only=True)
 class AddTarget:
-    """Where a note goes: the chosen deck, with whatever notetype the editor reports as current."""
+    """Where a note goes: the chosen deck, with the notetype the gateway is configured to use."""
 
     deck_id: int
     notetype_id: int
@@ -24,14 +24,15 @@ class AddTarget:
 
 
 class CardGateway(Protocol):
-    """Adds a note to a deck of the AnkiWeb account, with the current notetype."""
+    """Adds a note to a deck of the AnkiWeb account, with the notetype it is configured to use."""
 
     @abstractmethod
     async def add_target(self, deck_id: int) -> AddTarget:
         """Return the target for ``deck_id``.
 
-        Raises ``AnkiDeckNotFoundError`` when the account no longer has ``deck_id``, and
-        ``AnkiSessionExpiredError``/``AnkiCardCreationError`` as any other AnkiWeb read does.
+        Raises ``AnkiDeckNotFoundError`` when the account no longer has ``deck_id``,
+        ``AnkiTemplateTargetNotFoundError`` when the account has no notetype of the configured
+        name, and ``AnkiSessionExpiredError``/``AnkiCardCreationError`` as any other AnkiWeb read does.
         """
         raise NotImplementedError
 
@@ -47,5 +48,5 @@ logger = logging.getLogger(__name__)
 def ensure_front_back(target: AddTarget) -> None:
     """Raise ``AnkiUnsupportedNotetypeError`` unless ``target`` takes a plain front/back note."""
     if target.field_count != FRONT_BACK_FIELD_COUNT:
-        logger.warning("AnkiWeb's current notetype %s is not front/back", target.notetype_id)
+        logger.warning("The configured notetype %s is not front/back", target.notetype_id)
         raise AnkiUnsupportedNotetypeError

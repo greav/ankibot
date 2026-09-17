@@ -20,6 +20,12 @@ anki_svc:
   # Reuses anki_web's ankiuser_base_url so the two cannot drift apart.
   ankiuser_base_url: ${anki_web.ankiuser_base_url}
 
+anki_cards:
+  # The notetype /addcard and snippet cards write through; it must have exactly two fields
+  # (front/back). Resolved by name on every add, never taken from AnkiWeb's "current" notetype:
+  # adding a note makes its notetype current, so a vocabulary card would otherwise switch it.
+  notetype_name: "Основная"
+
 anki_vocabulary_cards:
   # Where generated word cards go. The notetype's field names are read from AnkiWeb at
   # runtime, so editing the notetype in Anki needs no change here.

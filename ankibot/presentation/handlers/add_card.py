@@ -10,6 +10,7 @@ from dishka import FromDishka
 from ankibot.application.exceptions.anki import (
     AnkiDeckNotFoundError,
     AnkiSessionExpiredError,
+    AnkiTemplateTargetNotFoundError,
     AnkiUnsupportedNotetypeError,
 )
 from ankibot.application.exceptions.base import ApplicationError
@@ -142,9 +143,12 @@ async def back_handler(
     except AnkiUnsupportedNotetypeError:
         await state.clear()
         await message.answer(
-            "AnkiWeb's current notetype isn't set up for a simple front/back card. "
-            "Switch to a two-field notetype (e.g. Basic) in AnkiWeb's editor and try again."
+            "The configured notetype isn't a simple front/back one. "
+            "Point the bot's config at a two-field notetype (e.g. Basic) and try again."
         )
+    except AnkiTemplateTargetNotFoundError as error:
+        await state.clear()
+        await message.answer(str(error))
     except AnkiSessionExpiredError:
         await state.clear()
         await message.answer(AUTH_FIRST)

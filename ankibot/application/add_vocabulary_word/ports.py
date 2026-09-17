@@ -29,5 +29,5 @@ class VocabularyCardGateway(Protocol):
 
     @abstractmethod
     async def add_note(self, target: VocabularyTarget, fields: Sequence[str]) -> None:
-        """Add a note whose values are ordered as ``target.template`` lists its fields."""
+        """Add a note whose plain-text values are ordered as ``target.template`` lists its fields."""
         raise NotImplementedError

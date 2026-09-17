@@ -18,6 +18,7 @@ from ankibot.application.exceptions.anki import (
     AnkiCardCreationError,
     AnkiDeckListingError,
     AnkiSessionExpiredError,
+    AnkiTemplateTargetNotFoundError,
 )
 from ankibot.presentation.handlers.add_card import AddCard
 from ankibot.presentation.keyboards.decks import DeckCallback
@@ -116,6 +117,24 @@ async def test_user_cannot_add_a_card_without_authenticating(
     assert session.last_answer == "Run /auth first."
 
 
+async def test_user_cannot_add_a_card_when_the_configured_notetype_is_missing(
+    dispatcher: Dispatcher, card_gateway: FakeCardGateway
+) -> None:
+    """A configured notetype absent from the account is reported by name, not as a generic failure."""
+    # Arrange
+    session = RecordingSession()
+
+    # Act
+    await send(dispatcher, session, "/addcard", chat_id=40, user_id=40)
+    await pick_deck(dispatcher, session, DEFAULT_DECK_ID, chat_id=40, user_id=40)
+    await send(dispatcher, session, "front", chat_id=40, user_id=40)
+    card_gateway.error = AnkiTemplateTargetNotFoundError("distinctive-target-reason")
+    await send(dispatcher, session, "back", chat_id=40, user_id=40)
+
+    # Assert
+    assert session.last_answer == "distinctive-target-reason"
+
+
 async def test_user_cannot_add_a_card_when_ankiweb_fails(
     dispatcher: Dispatcher, card_gateway: FakeCardGateway
 ) -> None:
@@ -193,7 +212,7 @@ async def test_user_cannot_start_adding_a_card_when_ankiweb_is_unreachable(
 async def test_user_cannot_add_a_card_to_a_notetype_without_two_fields(
     dispatcher: Dispatcher, card_gateway: FakeCardGateway
 ) -> None:
-    """A current notetype that isn't front/back-shaped tells the user to switch it, not a generic error."""
+    """A configured notetype that isn't front/back-shaped tells the user to fix the config, not a generic error."""
     # Arrange
     card_gateway.field_count = 8
     session = RecordingSession()
@@ -206,8 +225,8 @@ async def test_user_cannot_add_a_card_to_a_notetype_without_two_fields(
 
     # Assert
     assert session.last_answer == (
-        "AnkiWeb's current notetype isn't set up for a simple front/back card. "
-        "Switch to a two-field notetype (e.g. Basic) in AnkiWeb's editor and try again."
+        "The configured notetype isn't a simple front/back one. "
+        "Point the bot's config at a two-field notetype (e.g. Basic) and try again."
     )
 
 

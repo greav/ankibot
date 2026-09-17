@@ -161,6 +161,35 @@ async def test_gateway_can_add_a_note_with_fields_in_template_order(svc_config: 
     assert parsed.add.deck_id == DECK_ID
 
 
+async def test_gateway_can_render_line_breaks_as_html_for_ankiweb(svc_config: AnkiSvcClientConfig) -> None:
+    """A multi-line value reaches AnkiWeb with ``<br>`` between the lines, since a field is HTML."""
+    # Arrange
+    requests: list[httpx.Request] = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return await build_handler()(request)
+
+    target = VocabularyTarget(
+        deck_id=DECK_ID,
+        deck_name=DECK_NAME,
+        notetype_id=NOTETYPE_ID,
+        template=CardTemplate(name=NOTETYPE_NAME, fields=("Word", "Meaning", "Example")),
+    )
+
+    async with client_for(handler) as client:
+        gateway = make_gateway(svc_config, client)
+
+        # Act
+        await gateway.add_note(target, ["wind", "1. moving air\n2. to twist", "A & B <3"])
+
+    # Assert
+    add_request = next(request for request in requests if request.url.path == "/svc/editor/add-or-update")
+    parsed = AddOrUpdateRequest()
+    parsed.ParseFromString(add_request.content)
+    assert list(parsed.fields) == ["wind", "1. moving air<br>2. to twist", "A &amp; B &lt;3"]
+
+
 async def test_gateway_cannot_resolve_a_target_on_an_expired_session(svc_config: AnkiSvcClientConfig) -> None:
     """A 403 from get-info-for-adding means the AnkiWeb session is not established or has expired."""
     # Arrange

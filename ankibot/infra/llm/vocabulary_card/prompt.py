@@ -13,7 +13,9 @@ logger = logging.getLogger(__name__)
 SYSTEM_PROMPT = (
     "You fill the fields of an Anki flashcard for a single English vocabulary word a language "
     "learner wants to study. Reply with plain text only in every field — no HTML and no Markdown "
-    "formatting, since the values are stored and shown verbatim."
+    "formatting, since the values are stored and shown verbatim. When a field holds several "
+    "items — sentences, situations, senses — put each on its own line, never run them together "
+    "in one paragraph."
 )
 
 
@@ -66,8 +68,13 @@ def build_user_content(
 # or keep this and note here that the field comes back empty.
 FIELD_HINTS = {
     "Word": "the headword, lowercase",
-    "Meaning": "short English definition, under 12 words",
-    "Example": "one natural sentence using the word",
+    "Definition": "a short plain-English definition per sense, one sense per line, numbered when there are several",
+    "Part of Speech": "the parts of speech, separated by semicolons",
+    "Synonyms": "a few close synonyms, separated by semicolons",
+    "Situations to Use It": "when a learner would reach for this word, one situation per line",
+    "Russian Translations": "translations separated by semicolons, in the order of the senses",
+    "Example Sentences": "three to five natural sentences, one per line",
+    "Sound": "IPA transcription, one per line when the readings differ",
 }
 
 _HINTS = {name.strip().casefold(): hint for name, hint in FIELD_HINTS.items()}

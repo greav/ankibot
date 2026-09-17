@@ -166,6 +166,30 @@ async def test_gateway_can_add_a_card_to_the_target(svc_config: AnkiSvcClientCon
     assert parsed.add.deck_id == DECK_ID
 
 
+async def test_gateway_can_render_line_breaks_as_html_for_ankiweb(svc_config: AnkiSvcClientConfig) -> None:
+    """A multi-line side reaches AnkiWeb with ``<br>`` between the lines, since a field is HTML."""
+    # Arrange
+    requests: list[httpx.Request] = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return await build_handler()(request)
+
+    target = AddTarget(deck_id=DECK_ID, notetype_id=NOTETYPE_ID, deck_name=DECK_NAME, field_count=2)
+
+    async with client_for(handler) as client:
+        gateway = make_gateway(client, svc_config)
+
+        # Act
+        await gateway.add_card(target, "What is x?", "First.\nSecond & <third>")
+
+    # Assert
+    add_request = next(request for request in requests if request.url.path == "/svc/editor/add-or-update")
+    parsed = AddOrUpdateRequest()
+    parsed.ParseFromString(add_request.content)
+    assert list(parsed.fields) == ["What is x?", "First.<br>Second &amp; &lt;third&gt;"]
+
+
 async def test_gateway_cannot_read_the_add_target_on_an_expired_session(
     svc_config: AnkiSvcClientConfig,
 ) -> None:

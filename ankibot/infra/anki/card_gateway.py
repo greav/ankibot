@@ -8,6 +8,7 @@ from ankibot.application.exceptions.anki import (
     AnkiDeckNotFoundError,
     AnkiTemplateTargetNotFoundError,
 )
+from ankibot.infra.anki.field_html import to_field_html
 from ankibot.infra.anki.svc import AnkiSvcClient
 from ankiweb.editor.add_or_update_pb2 import AddOrUpdateRequest, AddOrUpdateResponse
 from ankiweb.editor.get_info_for_adding_pb2 import GetInfoForAddingRequest, GetInfoForAddingResponse
@@ -77,7 +78,7 @@ class AnkiWebCardGateway(CardGateway):
     @override
     async def add_card(self, target: AddTarget, front: str, back: str) -> None:
         add_request = AddOrUpdateRequest(
-            fields=[front, back],
+            fields=[to_field_html(front), to_field_html(back)],
             tags="",
             add=AddOrUpdateRequest.AddMode(notetype_id=target.notetype_id, deck_id=target.deck_id),
         )

@@ -6,7 +6,15 @@
 import pytest
 
 from ankibot.application.manage_decks import Deck
-from ankibot.presentation.keyboards.decks import DECK_PAGE_SIZE, DeckCallback, page_of
+from ankibot.presentation.keyboards.decks import (
+    DECK_PAGE_SIZE,
+    ConfirmRemoveDeckCallback,
+    DeckCallback,
+    DeckPageCallback,
+    PickerMode,
+    RemoveDeckCallback,
+    page_of,
+)
 
 TELEGRAM_CALLBACK_DATA_LIMIT = 64
 MAX_INT64 = 2**63 - 1
@@ -61,10 +69,16 @@ def test_user_can_page_a_list_that_exactly_fills_a_page() -> None:
     assert page.has_next is False
 
 
-def test_user_cannot_overflow_telegrams_callback_data_limit() -> None:
-    """Even the largest deck id AnkiWeb can hand out fits Telegram's 64-byte callback_data."""
-    # Arrange / Act
-    packed = DeckCallback(id=MAX_INT64).pack()
-
+@pytest.mark.parametrize(
+    "packed",
+    [
+        DeckCallback(id=MAX_INT64).pack(),
+        RemoveDeckCallback(id=MAX_INT64, page=MAX_INT64).pack(),
+        ConfirmRemoveDeckCallback(id=MAX_INT64).pack(),
+        DeckPageCallback(page=MAX_INT64, mode=PickerMode.MANAGE).pack(),
+    ],
+)
+def test_user_cannot_overflow_telegrams_callback_data_limit(packed: str) -> None:
+    """Even the largest deck id AnkiWeb can hand out fits Telegram's 64-byte callback_data, on every button."""
     # Assert
     assert len(packed.encode()) <= TELEGRAM_CALLBACK_DATA_LIMIT

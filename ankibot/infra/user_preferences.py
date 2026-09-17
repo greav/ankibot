@@ -75,6 +75,15 @@ class JsonFileUserPreferencesStore(SelectedDeckStore, SelectedModelStore):
             self._write()
 
     @override
+    async def clear_deck(self, user_id: int) -> None:
+        async with self._lock:
+            current = self._preferences.get(user_id)
+            if current is None or current.deck_id is None:
+                return
+            self._preferences[user_id] = _Preferences(deck_id=None, model=current.model)
+            self._write()
+
+    @override
     async def get_model(self, user_id: int) -> str | None:
         preferences = self._preferences.get(user_id)
         return preferences.model if preferences is not None else None

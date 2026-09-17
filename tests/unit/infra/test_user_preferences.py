@@ -70,6 +70,35 @@ async def test_user_can_change_their_deck(tmp_path: Path) -> None:
     assert await make_store(path).get_deck(user_id=1) == 20
 
 
+async def test_user_can_forget_their_deck_without_losing_their_model(tmp_path: Path) -> None:
+    """Clearing the deck leaves the user with no target after a restart, and their model intact."""
+    # Arrange
+    path = tmp_path / "user_preferences.json"
+    store = make_store(path)
+    await store.set_deck(user_id=1, deck_id=10)
+    await store.set_model(user_id=1, model_id="gpt-5-mini")
+
+    # Act
+    await store.clear_deck(user_id=1)
+    reopened = make_store(path)
+
+    # Assert
+    assert await reopened.get_deck(user_id=1) is None
+    assert await reopened.get_model(user_id=1) == "gpt-5-mini"
+
+
+async def test_user_can_forget_a_deck_they_never_picked(tmp_path: Path) -> None:
+    """Clearing with nothing to clear is a no-op that leaves no file behind."""
+    # Arrange
+    path = tmp_path / "user_preferences.json"
+
+    # Act
+    await make_store(path).clear_deck(user_id=1)
+
+    # Assert
+    assert not path.exists()
+
+
 async def test_user_can_pick_a_model_without_losing_their_deck(tmp_path: Path) -> None:
     """Setting one preference leaves the other as it was, in the file and not only in memory."""
     # Arrange

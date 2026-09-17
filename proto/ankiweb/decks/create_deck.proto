@@ -1,0 +1,13 @@
+// Sliced from docs/ankiweb-svc.reference.proto — do not edit by hand beyond
+// re-slicing from the reference. Regenerate with `make compile_proto` and
+// commit the result whenever this file changes.
+
+syntax = "proto3";
+
+package ankiweb.svc;
+
+// POST /svc/decks/create-deck (served from ankiweb.net, not ankiuser.net)
+message CreateDeckRequest {
+  string name = 1;
+}
+message CreateDeckResponse {}

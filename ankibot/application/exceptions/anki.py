@@ -27,6 +27,14 @@ class AnkiDeckListingError(ApplicationError):
     message = "Failed to read the deck list from AnkiWeb"
 
 
+class AnkiDeckCreationError(ApplicationError):
+    message = "Failed to create the deck in AnkiWeb"
+
+
+class AnkiDeckRemovalError(ApplicationError):
+    message = "Failed to delete the deck in AnkiWeb"
+
+
 class AnkiCardCreationError(ApplicationError):
     message = "Failed to add the card to AnkiWeb"
 

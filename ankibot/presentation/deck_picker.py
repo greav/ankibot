@@ -12,17 +12,27 @@ from aiogram.types import CallbackQuery, Message
 
 from ankibot.application.exceptions.anki import AnkiDeckNotFoundError, AnkiSessionExpiredError
 from ankibot.application.exceptions.base import ApplicationError
-from ankibot.application.manage_decks import SelectDeck, SelectDeckRequest
+from ankibot.application.manage_decks import Deck, SelectDeck, SelectDeckRequest
 from ankibot.presentation.identity import TelegramUserId
 
 logger = logging.getLogger(__name__)
 
 CHOOSE_A_DECK = "Choose a deck:"
+CHOOSE_A_DECK_TO_DELETE = "Choose a deck to delete:"
 NO_DECKS = "You have no decks in AnkiWeb yet."
+SEND_DECK_NAME = "Send the name of the new deck, or /cancel."
+DECK_NAME_BLANK = "A deck name can't be empty. Send the name of the new deck, or /cancel."
+DECK_CREATION_FAILED = "Failed to create the deck in AnkiWeb. Please try again later."
+DECK_REMOVAL_FAILED = "Failed to delete the deck in AnkiWeb. Please try again later."
 AUTH_FIRST = "Run /auth first."
 DECK_GONE = "That deck no longer exists in AnkiWeb. Run /decks again."
 CHOOSE_DECK_FIRST = "Choose a deck with /decks first."
 ANKIWEB_UNREACHABLE = "Failed to reach AnkiWeb. Please try again later."
+
+
+def deck_named(decks: list[Deck], deck_id: int) -> str | None:
+    """The name behind a tapped deck id, or None when the deck is gone from the list."""
+    return next((deck.name for deck in decks if deck.id == deck_id), None)
 
 
 def deck_list_error_reply(error: ApplicationError) -> str:

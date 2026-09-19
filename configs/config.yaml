@@ -32,7 +32,7 @@ anki_vocabulary_cards:
   # Where generated word cards go. The notetype's field names are read from AnkiWeb at
   # runtime, so editing the notetype in Anki needs no change here.
   deck_name: "English Words V2"
-  notetype_name: "English Words Context" # the NOTETYPE's name; not always the deck's
+  notetype_name: "English Words" # the NOTETYPE's name; not always the deck's
 
 user_preferences:
   # Where each user's /decks and /model choices are kept between restarts. Relative to the working

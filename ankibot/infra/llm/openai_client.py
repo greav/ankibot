@@ -30,13 +30,17 @@ def build_openai_client(config: OpenAIClientConfig) -> AsyncOpenAI:
     )
 
 
-def reasoning_effort_argument(model: ModelOption) -> ReasoningEffort | Omit:
+def reasoning_effort_argument(
+    model: ModelOption, override: OpenAIReasoningEffort | None = None
+) -> ReasoningEffort | Omit:
     """The ``reasoning_effort`` to send for ``model``: its catalog value, or nothing at all.
 
     Omitting the parameter, rather than sending null, is what keeps a model that takes none
-    (gpt-4.1) from rejecting the request. The cast is safe because ``ModelEntryConfig`` validated
-    the value against ``OpenAIReasoningEffort`` when the config loaded.
+    (gpt-4.1) from rejecting the request — so ``override``, a task's own effort, applies only to
+    a model the catalog gave an effort to, and is dropped for one that takes no such setting.
+    The cast is safe because ``ModelEntryConfig`` validated the catalog value against
+    ``OpenAIReasoningEffort`` when the config loaded.
     """
     if model.reasoning_effort is None:
         return omit
-    return cast(ReasoningEffort, model.reasoning_effort)
+    return cast(ReasoningEffort, override or model.reasoning_effort)

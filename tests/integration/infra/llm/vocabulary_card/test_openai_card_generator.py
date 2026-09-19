@@ -96,7 +96,7 @@ async def test_generator_can_send_the_screenshot_context_as_an_image_part() -> N
     # Assert
     parts = json.loads(requests[0].content)["messages"][1]["content"]
     assert parts[0]["type"] == "text"
-    assert 'the English word "hello"' in parts[0]["text"]
+    assert 'the English entry "hello"' in parts[0]["text"]
     assert parts[1]["image_url"]["url"].startswith("data:image/jpeg;base64,")
 
 

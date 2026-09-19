@@ -85,3 +85,7 @@ openai_word_suggester:
 openai_snippet_cards:
   # Upper bound on cards distilled from one snippet; the model may return fewer.
   max_cards: 8
+  # Overrides the catalog's reasoning_effort for this one task: choosing which claims of a
+  # passage deserve a card is a judgment call, and at `none` the model flips sentences into
+  # questions. Ignored by a model the catalog gives no reasoning_effort (the GPT-4.1 family).
+  reasoning_effort: low

@@ -34,7 +34,8 @@ def test_user_content_can_list_the_kept_cards_after_the_text() -> None:
     # Assert
     assert result == (
         "The GIL serializes bytecode.\n\nFocus on: locks only\n\n"
-        "The learner already kept these cards from this passage. Do not repeat them; cover other facts:\n"
+        "The learner already kept these cards from this passage. Do not repeat them; cover other "
+        "rules, decisions or distinctions the passage states:\n"
         "- What is the GIL? — A lock\n- Q2 — A2"
     )
 

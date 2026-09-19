@@ -11,17 +11,24 @@ from ankibot.infra.llm.images import image_data_url
 logger = logging.getLogger(__name__)
 
 SYSTEM_PROMPT = (
-    "You fill the fields of an Anki flashcard for a single English vocabulary word a language "
-    "learner wants to study. Reply with plain text only in every field — no HTML and no Markdown "
-    "formatting, since the values are stored and shown verbatim. When a field holds several "
-    "items — sentences, situations, senses — put each on its own line, never run them together "
-    "in one paragraph."
+    "You fill the fields of an Anki flashcard for a single English vocabulary entry an "
+    "intermediate-to-advanced learner whose first language is Russian wants to study. The entry "
+    "may be a word, a phrasal verb, an idiom or a collocation: treat the whole expression as one "
+    "unit and never split it into its parts. The fields feed two cards: one showing the entry and "
+    "asking for its meaning, one showing the Russian translations and an example with the entry "
+    "blanked out and asking for the entry — so the translations must be specific enough to call "
+    "this entry to mind rather than a near-synonym, and what sets it apart from its near-synonyms "
+    "matters more than a long list of them. Keep every field as short as it can be while staying "
+    "exact: many short lines beat one paragraph. Reply with plain text only in every field — no "
+    "HTML and no Markdown formatting, "
+    "since the values are stored and shown verbatim. When a field holds several items — "
+    "sentences, situations, senses — put each on its own line, never run them together in one "
+    "paragraph."
 )
 
-
 CONTEXT_NOTE = (
-    "The word appears in the attached screenshot; ground the fields that quote its usage in the "
-    "sentence it appears in there."
+    "The entry appears in the attached screenshot; ground the fields that quote its usage in the "
+    "sentence it appears in there, and define first the sense it carries there."
 )
 
 
@@ -35,7 +42,7 @@ def build_user_prompt(
     read the word's usage off the screenshot sent alongside.
     """
     fields = ", ".join(template.fields)
-    parts = [f'Fill the fields ({fields}) of a flashcard for the English word "{word}".']
+    parts = [f'Fill the fields ({fields}) of a flashcard for the English entry "{word}".']
     if with_context:
         parts.append(CONTEXT_NOTE)
     if feedback is not None:
@@ -67,14 +74,34 @@ def build_user_content(
 # field or returns it empty. Then either read it in AnkiWebVocabularyCardGateway.target() and delete this dict,
 # or keep this and note here that the field comes back empty.
 FIELD_HINTS = {
-    "Word": "the headword, lowercase",
+    "Word": "the headword, lowercase; a phrasal verb, idiom or collocation stays whole",
     "Definition": "a short plain-English definition per sense, one sense per line, numbered when there are several",
     "Part of Speech": "the parts of speech, separated by semicolons",
-    "Synonyms": "a few close synonyms, separated by semicolons",
-    "Situations to Use It": "when a learner would reach for this word, one situation per line",
-    "Russian Translations": "translations separated by semicolons, in the order of the senses",
-    "Example Sentences": "three to five natural sentences, one per line",
-    "Sound": "IPA transcription, one per line when the readings differ",
+    "Synonyms": (
+        "a few close synonyms separated by semicolons, each followed in parentheses by how the "
+        "headword differs from it"
+    ),
+    "Situations to Use It": (
+        "when a learner would reach for this word, one situation per line, naming the register "
+        "(formal, informal, technical) when it is not neutral"
+    ),
+    "Russian Translations": (
+        "translations separated by semicolons, in the order of the senses, specific enough to "
+        "call this word to mind rather than a near-synonym"
+    ),
+    "Example Sentences": (
+        "two or three short natural sentences, one per line, one more for each further sense; "
+        "each shows a different sense or a different collocation"
+    ),
+    "IPA": "IPA transcription, one per line when the readings differ",
+    "Example with Blank": (
+        "the first example sentence with the entry replaced by ___, one ___ per word of the entry; "
+        "the front of the card that asks the learner to produce the entry"
+    ),
+    "Collocations": (
+        "the most frequent phrases the word forms, separated by semicolons, each as the whole "
+        "phrase a learner would say (heavily dependent on; make a decision)"
+    ),
 }
 
 _HINTS = {name.strip().casefold(): hint for name, hint in FIELD_HINTS.items()}

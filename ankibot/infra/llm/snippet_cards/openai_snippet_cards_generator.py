@@ -17,7 +17,7 @@ from ankibot.application.add_snippet_cards import DraftCard, Snippet, SnippetCar
 from ankibot.application.common.model_catalog import ModelOption
 from ankibot.application.exceptions.generation import CardGenerationError, CardGenerationUnavailableError
 from ankibot.infra.llm.failures import failure_reason
-from ankibot.infra.llm.openai_client import reasoning_effort_argument
+from ankibot.infra.llm.openai_client import OpenAIReasoningEffort, reasoning_effort_argument
 from ankibot.infra.llm.snippet_cards.parsing import CardsAnswer, to_draft_cards
 from ankibot.infra.llm.snippet_cards.prompt import build_system_prompt, build_user_content
 
@@ -29,6 +29,12 @@ class OpenAISnippetCardsGeneratorConfig:
     """What the adapter itself decides."""
 
     max_cards: int
+    reasoning_effort: OpenAIReasoningEffort | None
+    """How hard the model thinks over a passage, overriding the catalog's per-model value.
+
+    Picking which claims deserve a card is a judgment call, unlike filling a word's fields, so
+    this task is worth more thinking than the catalog pins for cheap calls. None keeps the
+    catalog's value; a model the catalog gave no effort to ignores this either way."""
 
 
 class OpenAISnippetCardsGenerator(SnippetCardsGenerator):
@@ -63,7 +69,7 @@ class OpenAISnippetCardsGenerator(SnippetCardsGenerator):
         try:
             response = await self._client.chat.completions.parse(
                 model=model.id,
-                reasoning_effort=reasoning_effort_argument(model),
+                reasoning_effort=reasoning_effort_argument(model, self._config.reasoning_effort),
                 messages=[
                     {"role": "system", "content": build_system_prompt(remaining)},
                     {"role": "user", "content": build_user_content(snippet, kept, feedback)},

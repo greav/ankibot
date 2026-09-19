@@ -10,6 +10,7 @@ from ankibot.application.add_snippet_cards import DraftCard, Snippet
 from ankibot.application.common.dto.image import Image
 from ankibot.application.common.model_catalog import ModelOption
 from ankibot.application.exceptions.generation import CardGenerationError, CardGenerationUnavailableError
+from ankibot.infra.llm.openai_client import OpenAIReasoningEffort
 from ankibot.infra.llm.snippet_cards.openai_snippet_cards_generator import (
     OpenAISnippetCardsGenerator,
     OpenAISnippetCardsGeneratorConfig,
@@ -52,11 +53,11 @@ def build_handler(
 
 
 def make_generator(
-    handler: OpenAIHandler, *, max_cards: int = 8
+    handler: OpenAIHandler, *, max_cards: int = 8, reasoning_effort: OpenAIReasoningEffort | None = None
 ) -> tuple[OpenAISnippetCardsGenerator, httpx2.AsyncClient]:
     client = openai_client_for(handler)
     openai_client = AsyncOpenAI(api_key=FAKE_API_KEY, http_client=client, max_retries=0)
-    config = OpenAISnippetCardsGeneratorConfig(max_cards=max_cards)
+    config = OpenAISnippetCardsGeneratorConfig(max_cards=max_cards, reasoning_effort=reasoning_effort)
     return OpenAISnippetCardsGenerator(config, openai_client), client
 
 
@@ -230,15 +231,19 @@ async def test_generator_cannot_leak_the_api_key_into_the_logs(caplog: pytest.Lo
 
 
 @pytest.mark.parametrize(
-    ("model", "expected"),
+    ("model", "override", "expected"),
     [
-        (ModelOption(id="gpt-5.6-luna", label="Luna", reasoning_effort="none"), "none"),
-        (ModelOption(id="gpt-4.1", label="4.1"), None),
+        (ModelOption(id="gpt-5.6-luna", label="Luna", reasoning_effort="none"), None, "none"),
+        (ModelOption(id="gpt-5.6-luna", label="Luna", reasoning_effort="none"), "low", "low"),
+        (ModelOption(id="gpt-4.1", label="4.1"), None, None),
+        (ModelOption(id="gpt-4.1", label="4.1"), "low", None),
     ],
-    ids=["pinned", "omitted"],
+    ids=["pinned", "overridden", "omitted", "omitted-despite-override"],
 )
-async def test_generator_can_pin_the_models_reasoning_effort(model: ModelOption, expected: str | None) -> None:
-    """The catalog's reasoning effort reaches the request, and a model without one gets no such key at all."""
+async def test_generator_can_pin_the_models_reasoning_effort(
+    model: ModelOption, override: OpenAIReasoningEffort | None, expected: str | None
+) -> None:
+    """The task's own effort wins over the catalog's, and a model without one gets no such key at all."""
     # Arrange
     requests: list[httpx2.Request] = []
 
@@ -246,7 +251,7 @@ async def test_generator_can_pin_the_models_reasoning_effort(model: ModelOption,
         requests.append(request)
         return httpx2.Response(200, json=chat_completion_body(content=cards_content(("Q", "A"))))
 
-    generator, client = make_generator(handler)
+    generator, client = make_generator(handler, reasoning_effort=override)
 
     # Act
     async with client:

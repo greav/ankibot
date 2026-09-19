@@ -45,7 +45,7 @@ def test_response_schema_can_attach_a_hint_as_a_description() -> None:
     schema = response_schema(template)
 
     # Assert
-    assert schema["properties"]["Word"]["description"] == "the headword, lowercase"
+    assert schema["properties"]["Word"]["description"].startswith("the headword, lowercase")
     assert "description" not in schema["properties"]["Custom Field"]
 
 
@@ -58,8 +58,8 @@ def test_response_schema_can_match_a_hint_regardless_of_case_or_whitespace() -> 
     schema = response_schema(template)
 
     # Assert
-    assert schema["properties"][" word "]["description"] == "the headword, lowercase"
-    assert schema["properties"]["SYNONYMS"]["description"] == "a few close synonyms, separated by semicolons"
+    assert schema["properties"][" word "]["description"].startswith("the headword, lowercase")
+    assert schema["properties"]["SYNONYMS"]["description"].startswith("a few close synonyms")
 
 
 def test_response_schema_can_reorder_without_changing_anything_else() -> None:
